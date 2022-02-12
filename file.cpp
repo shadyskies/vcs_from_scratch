@@ -1,7 +1,22 @@
-// C++ implementation to create a file
+#include <iostream>
 #include <bits/stdc++.h>
 #include <fstream>
-using namespace std;
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <string>
+#include <cstring>
+#include <filesystem>
+
+using std::string;
+using std::cout;
+using std::cin;
+using std::cerr;
+using std::endl;
+using std::string;
+using std::fstream;
+using std::ios;
+using std::filesystem::recursive_directory_iterator;
+using std::to_string;
 
 void write_file(string text) {
     std::ofstream outfile;
@@ -9,36 +24,47 @@ void write_file(string text) {
     outfile << text; 
 }
 
-// Driver code
-int main()
-{
-	// fstream is Stream class to both
-	// read and write from/to files.
-	// file is object of fstream class
-    fstream file;
+// create directory to store file revisions
+void create_directory(string text) {
+    const char* path = text.c_str();
+    if (mkdir(path, 0777) == -1)
+        cerr << "Error :  " << strerror(errno) << endl;
+}
 
-    // opening file "Gfg.txt"
-    // in out(write) mode
-    // ios::out Open for output operations.
-    file.open("Gfg.txt",ios::out);
+// get all files in directory
+void get_files() {
+    string path = ".";
 
-    // If no file is created, then
-    // show the error message.
+    for (const auto & file : recursive_directory_iterator(path)) {
+        if (file.path().u8string().string::find(".git") == string::npos){
+        cout << file.path() << endl;
+        }
+    }
+}
+
+int create_file_revision(string text) {
+	fstream file;
+    file.open("tmp.txt",ios::out);
+    file << text;
     if(!file)
     {
         cout<<"Error in creating file!!!";
-        return 0;
+        return 1;
     }
 
     cout<<"File created successfully.";
-
-    // closing the file.
-    // The reason you need to call close()
-    // at the end of the loop is that trying
-    // to open a new file without closing the
-    // first file will fail.
     file.close();
+    return 0;
+}
+
+
+// Driver code
+int main()
+{
     write_file("this is the text appended");
-    write_file("this is some new text!");
+    write_file("\nthis is some new text!");
+    get_files();
+    create_directory("revisions");
+    create_file_revision("some");
     return 0;
 }
