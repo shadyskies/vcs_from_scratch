@@ -47,120 +47,164 @@ int create_directory(string text) {
     return 0;
 }
 
-static int callback(void *NotUsed, int argc, char **argv, char **azColName) {
+static int callback(void *param, int argc, char **argv, char **azColName) {
    int i;
    for(i = 0; i<argc; i++) {
       printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
    }
+   // if count = 0, insert data;
+   cout<<"params = "<<param<<endl;
    printf("\n");
    return 0;
 }
 
+// create files table in sqlite
+int create_table() {
+    cout <<"connecting to database";
+    sqlite3 *db;
+    char *errmessage = 0;
+    int connection;
+    connection = sqlite3_open("vcs.db", &db);
 
-// get all files in directory, check for changed files
-void get_files() {
-    // add all files
-    if (create_directory("revisions") == 2) {
-        sqlite3 *db;
-        char *errmessage = 0;
-        int connection;
-        connection = sqlite3_open("vcs.db", &db);
+    if (!connection) {
+        string query = "CREATE TABLE files (id INTEGER PRIMARY KEY DEFAULT 0, file_path VARCHAR(2048), created_at DATETIME);";
+        connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
 
-        if (connection) {
-            string path = ".";
-            string query = "INSERT INTO files(filepath, date_added) VALUES(";
-            for (const auto & file : recursive_directory_iterator(path)) {
-                if (file.path().u8string().string::find(".git") == string::npos){
-                    cout << file.path().u8string() << endl;
-                    auto t = std::time(nullptr);
-                    auto tm = *std::localtime(&t);      
-                    std::ostringstream oss;
-                    oss << std::put_time(&tm, "%Y-%m-%d %H-%M-%S");
-                    string timestamp = oss.str();
-                    query += file.path().u8string() + "," + timestamp + ");";
-                    cout<<"query: "<<query<<endl;
-                    connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
-
-                    if( connection != SQLITE_OK ){
-                        fprintf(stderr, "SQL error: %s\n", errmessage);
-                        sqlite3_free(errmessage);
-                    } else {
-                        fprintf(stdout, "Records created successfully\n");
-                    }
-                }
-            }
-        }
-        sqlite3_close(db);
-    }
-    // add only new files + ref to prev 
-    else {
-
-    }
-    
-}
-
-int create_file_revision(string text) {
-	fstream file;
-    auto t = std::time(nullptr);
-    auto tm = *std::localtime(&t);
-    std::hash<string> hash_string;
-
-
-    std::ostringstream oss;
-    oss << std::put_time(&tm, "%Y-%m-%d %H-%M-%S");
-    string timestamp = oss.str();
-    
-    string filepath = "revisions/" + timestamp + ".txt";
-    file.open(filepath,std::ios_base::app);
-    file <<hash_string(timestamp)<< endl << endl;
-    file << "This file was auto-generated on "<<timestamp;
-    if(!file)
-    {
-        cout<<"Error in creating file!!!";
-        return 1;
-    }
-    string path = ".";
-    std::ofstream file_list;
-    file_list.open(filepath,ios::in | ios::out);
-    
-    for (const auto & file : recursive_directory_iterator(path)) {
-        int count = 0;
-        if (file.path().u8string().string::find(".git") == string::npos){
-            // open file_list and add new files
-            std::ifstream file_list;
-            file_list.open("revisions/list.txt", std::ios_base::app);
-            if (file_list.is_open()) {
-                string line;
-                while(std::getline(file_list, line)){
-                    if (line.string::find(file.path().u8string()) != string::npos){
-                        count++;
-                    }
-                }
-            }
-            if (count==0) {
-                cout << file.path().u8string() << endl;
-                std::ofstream tmp;
-                tmp.open("revisions/list.txt", std::ios_base::app);
-                tmp <<file.path().u8string() << endl;
-                tmp.close();
-            }
-            file_list.close();
+        if( connection != SQLITE_OK ){
+            fprintf(stderr, "SQL error: %s\n", errmessage);
+            sqlite3_free(errmessage);
+        } else {
+            fprintf(stdout, "Records created successfully\n");
         }
     }
-    cout<<"File created successfully.";
-    file.close();
+    sqlite3_close(db);
     return 0;
 }
 
 
-// Driver code
-int main()
+
+// get all files in directory, check for changed files
+void commit() {
+    sqlite3 *db;
+    char *errmessage = 0;
+    int connection;
+    connection = sqlite3_open("vcs.db", &db);
+
+    if (!connection) {
+        string path = ".";
+        for (const auto & file : recursive_directory_iterator(path)) {
+            if (file.path().u8string().string::find(".git") == string::npos){
+                // check if exists in db
+                cout<<"file: "<<file.path().u8string()<<endl;
+                string query = "SELECT COUNT(*) FROM files WHERE file_path='" + file.path().u8string() + "';";
+                string file_path = "./file";
+                connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
+
+                // string query = "INSERT INTO files(file_path, created_at) VALUES('";
+                // cout << file.path().u8string() << endl;
+                // auto t = std::time(nullptr);
+                // auto tm = *std::localtime(&t);      
+                // std::ostringstream oss;
+                // oss << std::put_time(&tm, "%Y-%m-%d %H-%M-%S");
+                // string timestamp = oss.str();
+                // query += file.path().u8string() + "','" + timestamp + "');";
+                // // cout<<"query: "<<query<<endl;
+                // connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
+
+                // if(connection != SQLITE_OK ){
+                //     fprintf(stderr, "SQL error: %s\n", errmessage);
+                //     sqlite3_free(errmessage);
+                // } else {
+                //     fprintf(stdout, "Records created successfully\n");
+                // }
+            }
+        }
+    }
+    else {
+        cout<<"could not open database";
+    }
+    sqlite3_close(db);
+    
+}
+
+
+/* NOTE: deprecated for now */
+// int create_file_revision(string text) {
+// 	fstream file;
+//     auto t = std::time(nullptr);
+//     auto tm = *std::localtime(&t);
+//     std::hash<string> hash_string;
+
+
+//     std::ostringstream oss;
+//     oss << std::put_time(&tm, "%Y-%m-%d %H-%M-%S");
+//     string timestamp = oss.str();
+    
+//     string filepath = "revisions/" + timestamp + ".txt";
+//     file.open(filepath,std::ios_base::app);
+//     file <<hash_string(timestamp)<< endl << endl;
+//     file << "This file was auto-generated on "<<timestamp;
+//     if(!file)
+//     {
+//         cout<<"Error in creating file!!!";
+//         return 1;
+//     }
+//     string path = ".";
+//     std::ofstream file_list;
+//     file_list.open(filepath,ios::in | ios::out);
+    
+//     for (const auto & file : recursive_directory_iterator(path)) {
+//         int count = 0;
+//         if (file.path().u8string().string::find(".git") == string::npos){
+//             // open file_list and add new files
+//             std::ifstream file_list;
+//             file_list.open("revisions/list.txt", std::ios_base::app);
+//             if (file_list.is_open()) {
+//                 string line;
+//                 while(std::getline(file_list, line)){
+//                     if (line.string::find(file.path().u8string()) != string::npos){
+//                         count++;
+//                     }
+//                 }
+//             }
+//             if (count==0) {
+//                 cout << file.path().u8string() << endl;
+//                 std::ofstream tmp;
+//                 tmp.open("revisions/list.txt", std::ios_base::app);
+//                 tmp <<file.path().u8string() << endl;
+//                 tmp.close();
+//             }
+//             file_list.close();
+//         }
+//     }
+//     cout<<"File created successfully.";
+//     file.close();
+//     return 0;
+// }
+
+bool check_args(const std::string &value, const std::vector<std::string> &array)
 {
+    return std::find(array.begin(), array.end(), value) != array.end();
+}
+
+
+// Driver code
+int main(int argc, char* argv[])
+{
+    std::vector<std::string> commands {"add", "commit", "push", "remove"};
+    for(int i = 0; i < argc; ++i)
+        cout<<argv[i]<<endl;
     // check if empty repository
-    create_directory("revisions");
-    // write_file("this is the text appended");
-    // write_file("\nthis is some new text!");
-    get_files();
-    create_file_revision("some");
+    if(create_directory("revisions") != 2)
+        create_table();
+    if (argc == 1) {
+        cout<<"Incorrect usage. Run ./a.out <add/commit/push>"<<endl;
+    }
+
+    if (check_args(argv[1], commands)) {
+        cout<<"executing commands";
+        commit();
+    }
+    // create_file_revision("some");
     return 0;
 }
