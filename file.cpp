@@ -47,15 +47,55 @@ int create_directory(string text) {
     return 0;
 }
 
+void insert(string file_path);
+
+// get current time as string
+string get_curr_time() {
+    auto t = std::time(nullptr);
+    auto tm = *std::localtime(&t);      
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%Y-%m-%d %H-%M-%S");
+    string timestamp = oss.str();
+    return timestamp;   
+}
+
+
 static int callback(void *param, int argc, char **argv, char **azColName) {
-   int i;
-   for(i = 0; i<argc; i++) {
-      printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
-   }
-   // if count = 0, insert data;
-   cout<<"params = "<<param<<endl;
-   printf("\n");
-   return 0;
+    std::string &s = *static_cast<std::string*>(param);
+    int i;
+    for(i = 0; i<argc; i++) {
+        printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
+    }
+    // if count == 0, insert
+    if ((!strcmp(azColName[0], "COUNT(*)")) && (atoi(argv[0]) == 0)) {
+        // set flag as 1
+        string *flag = (string*)param;
+        *flag = "1";
+        return 1; 
+        
+    }
+    printf("\n");
+    return 0;
+}
+
+
+void insert(string file_path, sqlite3 *db) {
+    char *errmessage = 0;
+    int connection;
+    connection = sqlite3_open("vcs.db", &db);   
+
+    if (!connection) {
+        string timestamp = get_curr_time();
+        string query = "INSERT INTO files(file_path, created_at) VALUES ('" + file_path + "', '" + timestamp +"');";
+        connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
+
+        if( connection != SQLITE_OK ){
+            fprintf(stderr, "SQL error: %s\n", errmessage);
+            sqlite3_free(errmessage);
+        } else {
+            fprintf(stdout, "Records created successfully\n");
+        }
+    }
 }
 
 // create files table in sqlite
@@ -74,7 +114,7 @@ int create_table() {
             fprintf(stderr, "SQL error: %s\n", errmessage);
             sqlite3_free(errmessage);
         } else {
-            fprintf(stdout, "Records created successfully\n");
+            fprintf(stdout, "Table created successfully\n");
         }
     }
     sqlite3_close(db);
@@ -95,28 +135,13 @@ void commit() {
         for (const auto & file : recursive_directory_iterator(path)) {
             if (file.path().u8string().string::find(".git") == string::npos){
                 // check if exists in db
-                cout<<"file: "<<file.path().u8string()<<endl;
                 string query = "SELECT COUNT(*) FROM files WHERE file_path='" + file.path().u8string() + "';";
-                string file_path = "./file";
-                connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
-
-                // string query = "INSERT INTO files(file_path, created_at) VALUES('";
-                // cout << file.path().u8string() << endl;
-                // auto t = std::time(nullptr);
-                // auto tm = *std::localtime(&t);      
-                // std::ostringstream oss;
-                // oss << std::put_time(&tm, "%Y-%m-%d %H-%M-%S");
-                // string timestamp = oss.str();
-                // query += file.path().u8string() + "','" + timestamp + "');";
-                // // cout<<"query: "<<query<<endl;
-                // connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
-
-                // if(connection != SQLITE_OK ){
-                //     fprintf(stderr, "SQL error: %s\n", errmessage);
-                //     sqlite3_free(errmessage);
-                // } else {
-                //     fprintf(stdout, "Records created successfully\n");
-                // }
+                string file_path = file.path().u8string();
+                string tmp = file.path().u8string();
+                connection = sqlite3_exec(db, query.c_str(), callback, &tmp, &errmessage);   
+                if (atoi(tmp.c_str()) == 1) {
+                    insert(file_path, db);
+                }
             }
         }
     }
