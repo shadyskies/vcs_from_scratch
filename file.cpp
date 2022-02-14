@@ -61,15 +61,18 @@ string get_curr_time() {
 
 
 static int callback(void *param, int argc, char **argv, char **azColName) {
+    // cout<<"inside callback"<<endl;
+    // cout<<"param[0]="<<((string*)param)[0]<<endl;
+    // cout<<"param[1]="<<((string*)param)[1]<<endl;
     std::string &s = *static_cast<std::string*>(param);
     int i;
-    for(i = 0; i<argc; i++) {
-        printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
-    }
+    // for(i = 0; i<argc; i++) {
+    //     printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
+    // }
     // if count == 0, insert
     if ((!strcmp(azColName[0], "COUNT(*)")) && (atoi(argv[0]) == 0)) {
         // set flag as 1
-        string *flag = (string*)param;
+        string *flag = &((string*)param)[0];
         *flag = "1";
         return 1; 
         
@@ -137,9 +140,11 @@ void commit() {
                 // check if exists in db
                 string query = "SELECT COUNT(*) FROM files WHERE file_path='" + file.path().u8string() + "';";
                 string file_path = file.path().u8string();
-                string tmp = file.path().u8string();
-                connection = sqlite3_exec(db, query.c_str(), callback, &tmp, &errmessage);   
-                if (atoi(tmp.c_str()) == 1) {
+                std::pair<string, string> pair1;
+                pair1 = make_pair(file_path, file.file_size());
+                
+                connection = sqlite3_exec(db, query.c_str(), callback, &pair1, &errmessage);   
+                if (atoi(pair1.first.c_str()) == 1) {
                     insert(file_path, db);
                 }
             }
@@ -150,6 +155,51 @@ void commit() {
     }
     sqlite3_close(db);
     
+}
+
+
+// get files status
+void status () {
+    sqlite3 *db;
+    char *errmessage = 0;
+    int connection;
+    connection = sqlite3_open("vcs.db", &db);
+
+    // status vectors
+    std::vector<string> db_files;
+    std::vector<string> removed;
+    std::vector<string> added;
+
+    if (!connection) {
+        string path = ".";
+        for (const auto & file : recursive_directory_iterator(path)) {
+            if (file.path().u8string().string::find(".git") == string::npos){
+                // check if exists in db
+                string query = "SELECT COUNT(*) FROM files WHERE file_path='" + file.path().u8string() + "';";
+                string file_path = file.path().u8string();
+                string tmp[2];
+                if (!file.is_directory()) {
+                    // cout<<"file size: "<<file.file_size()<<endl;
+                    tmp[0] = file_path; tmp[1] = std::to_string(file.file_size());
+                } else {
+                    tmp[0] = file_path;
+                }
+                
+                connection = sqlite3_exec(db, query.c_str(), callback, &tmp, &errmessage);   
+                // cout<<"value returned: "<<tmp[0]<<endl;
+                // file path exists
+                if (atoi(tmp[0].c_str()) == 1) {
+                    cout<<"\n[ADDED] "<<file_path<<endl;
+                    added.push_back(file_path);
+                }
+            }
+        }
+    }
+    else {
+        cout<<"could not open database";
+    }
+    sqlite3_close(db);
+
 }
 
 
@@ -216,7 +266,7 @@ bool check_args(const std::string &value, const std::vector<std::string> &array)
 // Driver code
 int main(int argc, char* argv[])
 {
-    std::vector<std::string> commands {"add", "commit", "push", "remove"};
+    std::vector<std::string> commands {"status", "add", "commit", "push", "remove"};
     for(int i = 0; i < argc; ++i)
         cout<<argv[i]<<endl;
     // check if empty repository
@@ -228,7 +278,10 @@ int main(int argc, char* argv[])
 
     if (check_args(argv[1], commands)) {
         cout<<"executing commands";
-        commit();
+        if (strcmp(argv[1], "commit") == 0)
+            commit();
+        if (strcmp(argv[1], "status") == 0)
+            status();
     }
     // create_file_revision("some");
     return 0;
