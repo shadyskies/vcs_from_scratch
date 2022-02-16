@@ -144,7 +144,7 @@ int create_table() {
 
     if (!connection) {
         // files table
-        string query = "CREATE TABLE files (id INTEGER PRIMARY KEY DEFAULT 0, file_path VARCHAR(2048), created_at DATETIME DEFAULT CURRENT_TIMESTAMP, file_size INTEGER);";
+        string query = "CREATE TABLE files (id INTEGER PRIMARY KEY DEFAULT 0, file_path VARCHAR(2048), created_at DATETIME DEFAULT(datetime('now', 'localtime')), file_size INTEGER);";
         connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
 
         if( connection != SQLITE_OK ){
@@ -158,7 +158,7 @@ int create_table() {
     // commits table
     connection = sqlite3_open("vcs.db", &db);
     if (!connection){
-        string query = "CREATE TABLE commits (id INTEGER PRIMARY KEY DEFAULT 0, message VARCHAR(256), local_created_at DATETIME DEFAULT CURRENT_TIMESTAMP, remote_created_at DATETIME NULL, num_files_changed INTEGER);";
+        string query = "CREATE TABLE commits (id INTEGER PRIMARY KEY DEFAULT 0, message VARCHAR(256), local_created_at DATETIME DEFAULT(datetime('now', 'localtime')), remote_created_at DATETIME NULL, num_files_changed INTEGER);";
         connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
 
         if( connection != SQLITE_OK ){
@@ -172,7 +172,7 @@ int create_table() {
     // file_revisions table ( commit as fk )
     connection = sqlite3_open("vcs.db", &db);
     if (!connection) {
-        string query = "CREATE TABLE file_revisions(id INTEGER, file_path VARCHAR(1024),is_added BOOLEAN, is_REMOVED BOOLEAN, is_modified BOOLEAN, commit_id INT, FOREIGN KEY(commit_id) REFERENCES commits(id) ON DELETE CASCADE);";
+        string query = "CREATE TABLE file_revisions(id INTEGER PRIMARY KEY DEFAULT 0, file_path VARCHAR(1024),is_added BOOLEAN, is_REMOVED BOOLEAN, is_modified BOOLEAN, commit_id INT, FOREIGN KEY(commit_id) REFERENCES commits(id) ON DELETE CASCADE);";
         connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
 
         if( connection != SQLITE_OK ){
@@ -186,37 +186,33 @@ int create_table() {
     return 0;
 }
 
-// create .txt file based on revision_type(added, modified, removed) called by status
+// create .txt file based on revision_type(added, modified, removed) called only by status method
+// file_paths --> file paths to store on
 int file_revision(std::vector<string> file_paths, string revision_type) {
     if (file_paths.empty())
         return 0;
     string tmp_file = "./revisions/" + revision_type + ".txt";
-    if (std::filesystem::exists(tmp_file))
-        std::filesystem::remove(tmp_file);
+    std::filesystem::path p{tmp_file};
+    std::string path = ".";
+    if (std::filesystem::exists(p) == 1) {
+        std::filesystem::remove(p);
+    }
 
-    std::vector<string> files_ls;
-    listdir(files_ls);
-    std::vector<string> _files;
-    get_file_paths(_files, revision_type);
-    // cout<<"file_path: "<<file_path;
-    // cout<<"revision files:"<<_files.size()<<endl;
-    // cout<<"files in dir:"<<files_ls.size()<<endl;
+    std::vector<string> _files_in_file;
+    get_file_paths(_files_in_file, revision_type);
     
-    for (int j=0; j<file_paths.size(); j++){
-        // check if file_path exists in project dir
-        for (int i=0; i<files_ls.size(); i++){
-            if(strcmp(files_ls[i].c_str(), (file_paths[j]).c_str()) == 0) {
-                // check if file_path exists in <added / modified / removed>.txt file
-                if (std::find(_files.begin(), _files.end(),file_paths[j]) != _files.end() != 0) {
-                    break;
-                }
-                std::ofstream added;
-                added.open("revisions/"+ revision_type +".txt", std::ios_base::app);
-                added <<file_paths[j]<<endl;
-                break;
-            }
-        } 
-
+    // if revision_type is removed, create file with revisions
+    for (int i=0; i<file_paths.size(); i++) {
+        // if path already added to file, skip
+        if (std::find(_files_in_file.begin(), _files_in_file.end(), file_paths[i]) == _files_in_file.end() == 0) {
+            continue;
+        }
+        else {
+            std::ofstream added;
+            added.open("revisions/" + revision_type +".txt", std::ios_base::app);
+            added<<file_paths[i]<<endl;
+            added.close();
+        }
     }
     return 0;
 }
@@ -257,10 +253,66 @@ void commit(std::string message) {
     else {
         cout<<"could not open database";
     }
+        
+    // modified files
+    connection = sqlite3_open("vcs.db", &db);
+    std::vector<string> modified_files;
+    get_file_paths(modified_files, "modified");
+    if (!connection) {
+
+        for(int i = 0; i < modified_files.size(); i++) {
+            std::filesystem::path p{modified_files[i]};
+            string size;
+            if (std::filesystem::is_directory(p)) {
+                size = "0";
+            }
+            else {
+                size = to_string(std::filesystem::file_size(p));
+            }
+            string query = "UPDATE files SET file_size = " + size + " WHERE file_path='" + modified_files[i] + "';";
+            // cout<<"query: "<<query <<endl;
+            connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
+
+            if( connection != SQLITE_OK ){
+                fprintf(stderr, "SQL error: %s\n", errmessage);
+                sqlite3_free(errmessage);
+            } else {
+                fprintf(stdout, "Updated successfully\n");
+            }
+        }
+    }
+    else {
+        cout<<"could not open database";
+    }
+
+    // removed files
+    std::vector<std::string> removed;
+    get_file_paths(removed, "removed");
+    if (!connection) {
+
+        for(int i = 0; i < removed.size(); i++) {
+            string query = "DELETE FROM files WHERE file_path='" + removed[i] + "';";
+            // cout<<"query: "<<query <<endl;
+
+            connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
+
+            if( connection != SQLITE_OK ){
+                fprintf(stderr, "SQL error: %s\n", errmessage);
+                sqlite3_free(errmessage);
+            } else {
+                fprintf(stdout, "Removed successfully\n");
+            }
+        }
+    }
+    else {
+        cout<<"could not open database";
+    }
+
+
     // insert in commits table
     connection = sqlite3_open("vcs.db", &db);
     if (!connection) {
-        string query = "INSERT INTO commits(message, num_files_changed) VALUES('" + message + "', " + to_string(added_files.size()) + ");";
+        string query = "INSERT INTO commits(message, num_files_changed) VALUES('" + message + "', " + to_string(modified_files.size()) + ");";
         connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);
         if( connection != SQLITE_OK ){
                 fprintf(stderr, "SQL error: %s\n", errmessage);
