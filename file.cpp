@@ -12,6 +12,10 @@
 #include <iostream>
 #include <sqlite3.h>
 #include <stdlib.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+
 
 using std::string;
 using std::cout;
@@ -106,6 +110,19 @@ static int get_db_files_callback(void *param, int argc, char **argv, char **azCo
     return 0;
 }
 
+static int get_latest_commit_id(void *param, int argc, char **argv, char **azColName ) {
+    int *commit_id = (int*)param;
+    *commit_id = atoi(argv[0]);
+    return 0;
+}
+
+static int get_files_in_commit(void *param, int argc, char **argv, char **azColName) {
+    std::vector<string> *s1 = (std::vector<string> *)param;
+    s1->push_back(argv[0]);
+    return 0;
+}
+
+
 /* get all files in the directory in vector */
 void listdir(std::vector<string> &files_ls) {
     std::string path = ".";
@@ -172,7 +189,7 @@ int create_table() {
     // file_revisions table ( commit as fk )
     connection = sqlite3_open("vcs.db", &db);
     if (!connection) {
-        string query = "CREATE TABLE file_revisions(id INTEGER PRIMARY KEY DEFAULT 0, file_path VARCHAR(1024),is_added BOOLEAN, is_REMOVED BOOLEAN, is_modified BOOLEAN, commit_id INT, FOREIGN KEY(commit_id) REFERENCES commits(id) ON DELETE CASCADE);";
+        string query = "CREATE TABLE file_revisions(id INTEGER PRIMARY KEY DEFAULT 0, file_path VARCHAR(1024),is_added BOOLEAN, is_removed BOOLEAN, is_modified BOOLEAN, commit_id INT, FOREIGN KEY(commit_id) REFERENCES commits(id) ON DELETE CASCADE);";
         connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
 
         if( connection != SQLITE_OK ){
@@ -286,12 +303,12 @@ void commit(std::string message) {
     }
 
     // removed files
-    std::vector<std::string> removed;
-    get_file_paths(removed, "removed");
+    std::vector<std::string> removed_files;
+    get_file_paths(removed_files, "removed");
     if (!connection) {
 
-        for(int i = 0; i < removed.size(); i++) {
-            string query = "DELETE FROM files WHERE file_path='" + removed[i] + "';";
+        for(int i = 0; i < removed_files.size(); i++) {
+            string query = "DELETE FROM files WHERE file_path='" + removed_files[i] + "';";
             // cout<<"query: "<<query <<endl;
 
             connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
@@ -322,8 +339,69 @@ void commit(std::string message) {
         }
     }
 
-    // TODO:
-    // insert in file_revision table
+    // get the commit id for latest commit
+    connection = sqlite3_open("vcs.db", &db);
+    int commit_id = 0;
+    if (!connection) {
+        string query = "SELECT id from commits ORDER BY local_created_at DESC LIMIT 1;";
+        connection = sqlite3_exec(db, query.c_str(), get_latest_commit_id, &commit_id, &errmessage);     
+        cout<<"Latest commit id: "<<commit_id<<endl;
+        if( connection != SQLITE_OK ){
+                fprintf(stderr, "SQL error: %s\n", errmessage);
+                sqlite3_free(errmessage);
+        } else {
+            fprintf(stdout, "Inserted successfully\n");
+        }
+    }
+
+    // file_revisions table
+    connection = sqlite3_open("vcs.db", &db);
+    if (!connection) {
+        // file revisions for added files;
+        for(int i = 0; i < added_files.size(); i++) {
+            string query = "INSERT INTO file_revisions(file_path, is_added, commit_id) VALUES ('" + added_files[i] + "',true, " + to_string(commit_id) + ")";
+            connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
+
+            if( connection != SQLITE_OK ){
+                fprintf(stderr, "SQL error: %s\n", errmessage);
+                sqlite3_free(errmessage);
+            } else {
+                fprintf(stdout, "Inserted successfully\n");
+            }
+        }
+    }
+
+    connection = sqlite3_open("vcs.db", &db);
+    if (!connection) {
+        // file revisions for modified files;
+        for(int i = 0; i < modified_files.size(); i++) {
+            string query = "INSERT INTO file_revisions(file_path, is_modified, commit_id) VALUES ('" + modified_files[i] + "',true, " + to_string(commit_id) + ")";
+            connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
+
+            if( connection != SQLITE_OK ){
+                fprintf(stderr, "SQL error: %s\n", errmessage);
+                sqlite3_free(errmessage);
+            } else {
+                fprintf(stdout, "Inserted successfully\n");
+            }
+        }
+    }
+
+    connection = sqlite3_open("vcs.db", &db);
+    if (!connection) {
+        // file revisions for removed files;
+        for(int i = 0; i < removed_files.size(); i++) {
+            string query = "INSERT INTO file_revisions(file_path, is_removed, commit_id) VALUES ('" + removed_files[i] + "',true, " + to_string(commit_id) + ")";
+            connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
+
+            if( connection != SQLITE_OK ){
+                fprintf(stderr, "SQL error: %s\n", errmessage);
+                sqlite3_free(errmessage);
+            } else {
+                fprintf(stdout, "Inserted successfully\n");
+            }
+        }
+    }
      
     sqlite3_close(db);
     // delete file
@@ -331,7 +409,6 @@ void commit(std::string message) {
 }
 
 
-// TODO: add change for change in file_size
 // get files status
 void status () {
     sqlite3 *db;
@@ -410,33 +487,73 @@ void status () {
     sqlite3_close(db);
 }
 
-
-// similar to git add, create temp file to store new files
-int add(string file_path) {
-    create_revisions_directory("revisions");
-    std::vector<string> files_ls;
-    listdir(files_ls);
-    std::vector<string> added_files;
-    get_file_paths(added_files, "added");
-    // cout<<"added files:"<<added_files.size()<<endl;
-    
-    // check if file_path entered exists in project dir
-    for (int i=0; i<files_ls.size(); i++){
-        if(strcmp(files_ls[i].c_str(), ("./" + file_path).c_str()) == 0) {
-            if (std::find(added_files.begin(), added_files.end(), "./" + file_path) != added_files.end() != 0) {
-                cout<<"File already added!"<<endl;
-                return 1;
-            }
-            std::ofstream added;
-            added.open("revisions/added.txt", std::ios_base::app);
-            added << "./" + file_path<<endl;
-            cout<<"\nAdded file!";
-            return 0;
+void show_log() {
+    sqlite3 *db;
+    char *errmessage = 0;
+    int connection;
+    // number of commits to see log of
+    int n = 1;
+    cout<<"Enter number of commits to see log of: ";
+    cin>>n;
+    connection = sqlite3_open("vcs.db", &db);
+    int commit_id = 0;
+    if (!connection) {
+        string query = "SELECT id from commits ORDER BY local_created_at DESC LIMIT 1;";
+        connection = sqlite3_exec(db, query.c_str(), get_latest_commit_id, &commit_id, &errmessage);     
+        if( connection != SQLITE_OK ){
+                fprintf(stderr, "SQL error: %s\n", errmessage);
+                sqlite3_free(errmessage);
+        } else {}
+    }
+    while (n--) {
+        if(commit_id == 0)
+            break;
+        connection = sqlite3_open("vcs.db", &db);
+        std::vector<string> file_revisions;
+        string query = "SELECT (file_path) from file_revisions WHERE commit_id=" + to_string(commit_id) + ";";
+        connection = sqlite3_exec(db, query.c_str(), get_files_in_commit, &file_revisions, &errmessage);
+        if (connection != SQLITE_OK) {
+            fprintf(stderr, "SQL error: %s\n", errmessage);
+            sqlite3_free(errmessage);
+        } else {
+            // print the files
+            cout<<"Commit ID: "<<commit_id<<endl;
+            for (int i = 0; i < file_revisions.size(); i++) 
+                cout<<file_revisions[i]<<endl;
         }
-    } 
-    cout <<"\nFile not found!";
-    return 1;
+        cout<<endl;
+        commit_id--;
+    }
+
 }
+
+// deprecated as status itself adds the file revisions
+// // similar to git add, create temp file to store new files
+// int add(string file_path) {
+//     create_revisions_directory("revisions");
+//     std::vector<string> files_ls;
+//     listdir(files_ls);
+//     std::vector<string> added_files;
+//     get_file_paths(added_files, "added");
+//     // cout<<"added files:"<<added_files.size()<<endl;
+    
+//     // check if file_path entered exists in project dir
+//     for (int i=0; i<files_ls.size(); i++){
+//         if(strcmp(files_ls[i].c_str(), ("./" + file_path).c_str()) == 0) {
+//             if (std::find(added_files.begin(), added_files.end(), "./" + file_path) != added_files.end() != 0) {
+//                 cout<<"File already added!"<<endl;
+//                 return 1;
+//             }
+//             std::ofstream added;
+//             added.open("revisions/added.txt", std::ios_base::app);
+//             added << "./" + file_path<<endl;
+//             cout<<"\nAdded file!";
+//             return 0;
+//         }
+//     } 
+//     cout <<"\nFile not found!";
+//     return 1;
+// }
 
 
 /* NOTE: deprecated for now */
@@ -502,7 +619,7 @@ bool check_args(const std::string &value, const std::vector<std::string> &array)
 // Driver code
 int main(int argc, char* argv[])
 {
-    std::vector<std::string> commands {"status", "add", "commit", "push", "remove"};
+    std::vector<std::string> commands {"status", "commit", "push", "remove", "log"};
     // check if empty repository
     create_table();
     if (argc == 1) {
@@ -511,12 +628,14 @@ int main(int argc, char* argv[])
     }
 
     if (check_args(argv[1], commands)) {
-        if (strcmp(argv[1], "add") == 0)
-            add(argv[2]);
+        // if (strcmp(argv[1], "add") == 0)
+        //     add(argv[2]);
         if (strcmp(argv[1], "commit") == 0)
             commit(argv[2]);
         if (strcmp(argv[1], "status") == 0)
             status();
+        if (strcmp(argv[1], "log") == 0)
+            show_log();
     }
     else {
         cout<<"Unknown command: "<<argv[1]<<endl<<"Run ./a.out <add/commit/push>"<<endl;
