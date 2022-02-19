@@ -6,14 +6,61 @@
 #include <string.h>
 #include <fstream>
 #include <iostream>
-#define PORT 8080
+#define CHUNK_SIZE 1024
+#define PORT 8050
 using namespace std;
+
+int receive_basic(int sock, char *buf, string &file_name, string &file_content)
+{
+	int size_recv , total_size = 0;
+	int valread = recv(sock, buf, sizeof(buf), 0);
+	string stream_size;
+	string final_bytes;
+	// get the total bytes
+	for(int i=0; i<8; i++) {
+		final_bytes.push_back(buf[i]);
+		cout<<buf[i];
+		if (buf[i] != '#')
+			stream_size.push_back(buf[i]);
+	}
+	total_size += valread;
+
+	// get the file name
+	string tmp_file_name;
+	char file_name_ls[128];
+	valread = recv(sock, file_name_ls, sizeof(file_name_ls), 0);
+	for(int i=0; i<valread; i++) {
+		final_bytes.push_back(file_name_ls[i]);
+		if (file_name_ls[i]!='0')
+			tmp_file_name.push_back(file_name_ls[i]);
+	}
+	file_name = tmp_file_name;
+
+	string tmp_file_content;
+	// loop till entire file content is received
+	while(1){
+		char chunk[CHUNK_SIZE] = {};
+		if (total_size >= atoi(stream_size.c_str()))
+			break;
+		else {
+			valread = recv(sock, chunk, sizeof(chunk), 0);
+			
+			for (int i=0; i<valread; i++)
+				tmp_file_content.push_back(chunk[i]);
+			total_size += valread;
+		}
+	}
+	cout<<"[LOG] File Size received: "<<tmp_file_content.size()<<endl;
+	
+	file_content = tmp_file_content;
+	return file_content.size();
+}
+
 
 int main(int argc, char const *argv[])
 {
 	int sock = 0;
 	struct sockaddr_in serv_addr;
-	char *hello = "Hello from client";
 	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 	{
 		printf("\n Socket creation error \n");
@@ -35,23 +82,25 @@ int main(int argc, char const *argv[])
 		printf("\nConnection Failed \n");
 		return -1;
 	}
-	// send(sock , hello , strlen(hello) , 0 );
-	// printf("Hello message sent\n");
 	char buffer[1000000] = {};
-	int valread = read(sock , buffer, 1000000);
-	std::string file_name;
-	for(int i=0; i<128; i++) {
+	string file_name;
+	string file_content;
+	int valread = receive_basic(sock, buffer, file_name, file_content);
+	
+	// int valread = read(sock, buffer, sizeof(buffer));
+
+	cout<<"size of stream:";
+	for(int i = 0; i < 8; i++)
 		cout<<buffer[i];
-		if (buffer[i]!='0') {
-			cout<<buffer[i];
-			file_name.push_back(buffer[i]);
-		}
-	}
+	cout<<"\n";
+
+
 	cout<<"\nFile name: "<<file_name<<endl;
 	std::cout<<"[LOG] : Data received "<<valread<<" bytes\n";
+	std::cout<<"[LOG] : File Name: "<<file_name<<endl;
 	std::cout<<"[LOG] : Saving data to file.\n";
 	auto myfile = std::fstream(file_name + "received", std::ios::out | std::ios::binary);
-    myfile.write((char*)&buffer[128], valread);
+    myfile.write(file_content.c_str(), valread);
     myfile.close();
 	std::cout<<"[LOG] : File Saved.\n";
 	return 0;
