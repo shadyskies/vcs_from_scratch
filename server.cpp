@@ -23,18 +23,13 @@ int send_all(int socket, std::string final_bytes) {
 }
 
 
-
-int main(int argc, char const *argv[])
-{
+int create_socket() {
 	int server_fd, new_socket, valread;
 	struct sockaddr_in address;
 	int opt = 1;
 	int addrlen = sizeof(address);
-	char buffer[1000000] = {0};
 
-	std::ifstream file_to_send("./vcs.db", std::ios::in | std::ios::binary);
-	
-	// Creating socket file descriptor
+		// Creating socket file descriptor
 	if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
 	{
 		perror("socket failed");
@@ -70,6 +65,17 @@ int main(int argc, char const *argv[])
 		perror("accept");
 		exit(EXIT_FAILURE);
 	}
+
+	return new_socket;
+}
+
+
+int send(int new_socket, std::string file_name_arg) {
+	char buffer[1000000] = {0};
+
+	std::ifstream file_to_send(file_name_arg, std::ios::in | std::ios::binary);
+	
+
 	// send the buffer to the client
 	std::string contents((std::istreambuf_iterator<char>(file_to_send)), std::istreambuf_iterator<char>());
 
@@ -107,4 +113,13 @@ int main(int argc, char const *argv[])
 	// send(new_socket , final_bytes.c_str() , final_bytes.length() , 0 );
 	cout<<"[LOG] : Sent data"<<std::endl;
 	return 0;
+}
+
+
+
+int main(int argc, char const *argv[])
+{
+	int new_socket = create_socket();
+	send(new_socket, "vcs.db");
+	
 }

@@ -57,8 +57,7 @@ int receive_basic(int sock, char *buf, string &file_name, string &file_content)
 }
 
 
-int main(int argc, char const *argv[])
-{
+int create_socket() {
 	int sock = 0;
 	struct sockaddr_in serv_addr;
 	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
@@ -82,6 +81,10 @@ int main(int argc, char const *argv[])
 		printf("\nConnection Failed \n");
 		return -1;
 	}
+	return sock;
+}
+
+int receive(int sock) {
 	char buffer[1000000] = {};
 	string file_name;
 	string file_content;
@@ -99,9 +102,17 @@ int main(int argc, char const *argv[])
 	std::cout<<"[LOG] : Data received "<<valread<<" bytes\n";
 	std::cout<<"[LOG] : File Name: "<<file_name<<endl;
 	std::cout<<"[LOG] : Saving data to file.\n";
-	auto myfile = std::fstream(file_name + "received", std::ios::out | std::ios::binary);
+	auto myfile = std::fstream("received/" + file_name, std::ios::out | std::ios::binary);
     myfile.write(file_content.c_str(), valread);
     myfile.close();
 	std::cout<<"[LOG] : File Saved.\n";
+	return 0;
+}
+
+
+int main(int argc, char const *argv[])
+{
+	int sock = create_socket();
+	receive(sock);
 	return 0;
 }
