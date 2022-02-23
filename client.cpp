@@ -39,7 +39,7 @@ int create_socket() {
 		exit(EXIT_FAILURE);
 		return -1;
 	}
-	cout<<"Connected to "<<serv_addr.sin_addr.s_addr<<endl;
+	// cout<<"Connected to "<<serv_addr.sin_addr.s_addr<<endl;
 	return sock;
 }
 
@@ -118,7 +118,6 @@ int send_data(int new_socket, std::string file_name_arg) {
 
 	std::string file_name_with_extension = file_name_arg;
 
-	std::cout<<"file name length: "<<file_name_with_extension.length()<<std::endl;
 	// first 8 bytes is transmissi size, next 128 is file name, rest contents size
 	std::string final_size;
 
@@ -146,7 +145,7 @@ int send_data(int new_socket, std::string file_name_arg) {
 	std::cout<<"[LOG] : Transmission Data Size "<<final_bytes.length()<<" Bytes.\n";
 	send_all(new_socket, final_bytes);
 	// send(new_socket , final_bytes.c_str() , final_bytes.length() , 0 );
-	cout<<"[LOG] : Sent data"<<std::endl;
+	cout<<"[LOG] : Sent data\n\n";
 	return 0;
 }
 
@@ -180,6 +179,7 @@ int main()
 {
 	std::vector<string> files_ls = {"vcs.db", "a.out", "client.cpp", "server.cpp"};
 	// std::vector<string> files_ls = {"README.md", ".gitignore"};
+	// std::vector<string> files_ls = {"file.cpp"};
 	int sock = create_socket();
 	for(int i = 0; i < files_ls.size(); i++) {
 		// std::this_thread::sleep_for(std::chrono::milliseconds(4000));
@@ -194,7 +194,7 @@ int main()
 				break;
 			for(int i=0; i<valread; i++)
 				cout<<response_arr[i];
-			cout<<"bytes received: "<<valread<<endl;
+			// cout<<"bytes received: "<<valread<<endl;
 			printf("response: %s\n", response_arr);
 			// in case server closes socket, valread is 0
 			if (valread == 0) {
@@ -203,7 +203,6 @@ int main()
 			}
 		}
 		// close(sock);
-		cout<<"creating a new socket..."<<endl;
 	}
 	return 0;
 }
