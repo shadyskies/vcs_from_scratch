@@ -51,6 +51,7 @@ int send_all(int socket, std::string final_bytes) {
 	send(socket, (final_bytes.substr(8, 136)).c_str(), 128, 0);
 	// sending data
 	send(socket, (final_bytes.substr(136, final_bytes.size())).c_str(), final_bytes.size(), 0);
+	// send(socket, final_bytes.c_str(), final_bytes.size(), 0);
 	return 0;
 }
 
@@ -178,11 +179,10 @@ int receive_data(int sock) {
 int main()
 {
 	std::vector<string> files_ls = {"vcs.db", "a.out", "client.cpp", "server.cpp"};
-	// std::vector<string> files_ls = {"revisions/modified.txt", "revisions/removed.txt"};
+	// std::vector<string> files_ls = {"README.md", ".gitignore"};
 	int sock = create_socket();
 	for(int i = 0; i < files_ls.size(); i++) {
 		// std::this_thread::sleep_for(std::chrono::milliseconds(4000));
-		cout<<"sock:"<<sock<<endl;
 		// keep looping till you get response from server and if first file, then send without getting response 
 		cout<<"sending file: "<<files_ls[i]<<endl;
 		send_data(sock, files_ls[i]);
