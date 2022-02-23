@@ -8,10 +8,13 @@
 #include <fstream>
 #include <iostream>
 #define PORT 8050
+#define CHUNK_SIZE 1024
 using std::to_string;
 using std::cout;
+using std::string;
+using std::endl;
 
-
+// sends the entire data in chunks
 int send_all(int socket, std::string final_bytes) {
 	// sending first 8 bytes (stream size)
 	send(socket, (final_bytes.substr(0, 8)).c_str(), 8, 0);
@@ -19,7 +22,7 @@ int send_all(int socket, std::string final_bytes) {
 	send(socket, (final_bytes.substr(8, 136)).c_str(), 128, 0);
 	// sending data
 	send(socket, (final_bytes.substr(136, final_bytes.size())).c_str(), final_bytes.size(), 0);
-
+	return 0;
 }
 
 
@@ -54,23 +57,27 @@ int create_socket() {
 		perror("bind failed");
 		exit(EXIT_FAILURE);
 	}
+	cout<<"-----------------------------------";
+	cout<<"\nListening for connections"<<endl;
 	if (listen(server_fd, 3) < 0)
 	{
 		perror("listen");
 		exit(EXIT_FAILURE);
 	}
+	cout<<"No connection accepted as of now....";
 	if ((new_socket = accept(server_fd, (struct sockaddr *)&address,
 					(socklen_t*)&addrlen))<0)
 	{
 		perror("accept");
 		exit(EXIT_FAILURE);
 	}
+	cout<<"\u001b[32mClient connected successfully!\u001b[0m"<<endl;
 
 	return new_socket;
 }
 
 
-int send(int new_socket, std::string file_name_arg) {
+int send_data(int new_socket, std::string file_name_arg) {
 	char buffer[1000000] = {0};
 
 	std::ifstream file_to_send(file_name_arg, std::ios::in | std::ios::binary);
@@ -115,11 +122,106 @@ int send(int new_socket, std::string file_name_arg) {
 	return 0;
 }
 
+// receive the entire file, return -1 for no socket connection
+int receive_basic(int sock, char *buf, string &file_name, string &file_content)
+{
+	int size_recv , total_size = 0;
+	int valread = recv(sock, buf, sizeof(buf), 0);
+	string stream_size;
+	string final_bytes;
+	// get the total bytes
+	for(int i=0; i<8; i++) {
+		final_bytes.push_back(buf[i]);
+		cout<<buf[i];
+		if (buf[i] != '#')
+			stream_size.push_back(buf[i]);
+	}
+	total_size += valread;
+
+	// get the file name
+	string tmp_file_name;
+	char file_name_ls[128];
+	valread = recv(sock, file_name_ls, sizeof(file_name_ls), 0);
+	// return if 0 bytes received (no connection)
+	if (valread == 0)
+		return -1;
+	for(int i=0; i<valread; i++) {
+		final_bytes.push_back(file_name_ls[i]);
+		if (file_name_ls[i]!='0')
+			tmp_file_name.push_back(file_name_ls[i]);
+	}
+	file_name = tmp_file_name;
+
+	string tmp_file_content;
+	cout<<"size_received: "<<total_size<<endl;
+	// loop till entire file content is received
+	while(1){
+		char chunk[CHUNK_SIZE] = {};
+		if (total_size >= atoi(stream_size.c_str()))
+			break;
+		else {
+			valread = recv(sock, chunk, sizeof(chunk), 0);
+			if (valread == 0)
+				return -1;
+			cout<<"bytes received: "<<valread<<endl;
+			for (int i=0; i<valread; i++)
+				tmp_file_content.push_back(chunk[i]);
+			total_size += valread;
+		}
+	}
+	cout<<"[LOG] File Size received: "<<tmp_file_content.size()<<endl;
+	
+	file_content = tmp_file_content;
+	return file_content.size();
+}
+
+
+
+
+// return 0 for all data received and -1 for no socket connection
+int receive_data(int sock) {
+	char buffer[1000000] = {};
+	string file_name;
+	string file_content;
+	int valread = receive_basic(sock, buffer, file_name, file_content);
+	// int valread = read(sock, buffer, sizeof(buffer));
+	if (valread == -1)
+		return -1;
+
+	cout<<"size of stream:";
+	for(int i = 0; i < 8; i++)
+		cout<<buffer[i];
+	cout<<"\n";
+
+
+	cout<<"\nFile name: "<<file_name<<endl;
+	std::cout<<"[LOG] : Data received "<<valread<<" bytes\n";
+	std::cout<<"[LOG] : File Name: "<<file_name<<endl;
+	std::cout<<"[LOG] : Saving data to file.\n";
+	auto myfile = std::fstream("received/" + file_name, std::ios::out | std::ios::binary);
+    myfile.write(file_content.c_str(), valread);
+    myfile.close();
+	std::cout<<"[LOG] : File Saved.\n";
+	return 0;
+}
+
+
 
 
 int main(int argc, char const *argv[])
 {
 	int new_socket = create_socket();
-	send(new_socket, "vcs.db");
+	while(1){
+		// cout<<"receiving data again..."<<endl;
+		int receive_val = receive_data(new_socket);
+		// case of 
+		if (receive_val!=-1){
+			cout<<"sending response to client as file is received!"<<endl;
+			string tmp = "temp string";
+			cout<<"sending receive message..."<<send(new_socket, tmp.c_str(), strlen(tmp.c_str())+1, 1);
+		}
+		// close the socket so that client can send new data 
+		// close(new_socket);
+	}
 	
 }

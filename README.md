@@ -53,3 +53,7 @@ Add notes about how to use the system.
  - where does HEAD point?
  - package code
  - test in docker
+ - garbage values in end of file (check bytes written)
+ - diff bw server and client 
+ - multiple clients?
+ - listen for incoming connections after one client closes
