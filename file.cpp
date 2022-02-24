@@ -15,7 +15,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-
+#include "socket_functs.h"
 
 using std::string;
 using std::cout;
@@ -165,7 +165,7 @@ int create_table() {
         connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
 
         if( connection != SQLITE_OK ){
-            fprintf(stderr, "SQL error: %s\n", errmessage);
+            // fprintf(stderr, "SQL error: %s\n", errmessage);
             sqlite3_free(errmessage);
         } else {
             fprintf(stdout, "Files table created successfully\n");
@@ -179,7 +179,7 @@ int create_table() {
         connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
 
         if( connection != SQLITE_OK ){
-            fprintf(stderr, "SQL error: %s\n", errmessage);
+            // fprintf(stderr, "SQL error: %s\n", errmessage);
             sqlite3_free(errmessage);
         } else {
             fprintf(stdout, "Commit table created successfully\n");
@@ -193,7 +193,7 @@ int create_table() {
         connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
 
         if( connection != SQLITE_OK ){
-            fprintf(stderr, "SQL error: %s\n", errmessage);
+            // fprintf(stderr, "SQL error: %s\n", errmessage);
             sqlite3_free(errmessage);
         } else {
             fprintf(stdout, "Revisions table created successfully\n");
@@ -527,6 +527,54 @@ void show_log() {
 
 }
 
+
+int push_to_server() {
+    // get the files
+    sqlite3 *db;
+    char *errmessage = 0;
+    int connection;
+
+    connection = sqlite3_open("vcs.db", &db);
+    std::vector<string> file_revisions;
+    string query = "SELECT (file_path) from file_revisions ORDER BY id DESC LIMIT 1;";
+    connection = sqlite3_exec(db, query.c_str(), get_files_in_commit, &file_revisions, &errmessage);
+    if (connection != SQLITE_OK) {
+        fprintf(stderr, "SQL error: %s\n", errmessage);
+        sqlite3_free(errmessage);
+    } else {
+        // print the files
+        for (int i = 0; i < file_revisions.size(); i++) 
+            cout<<file_revisions[i]<<endl;
+    }
+    
+    // push to server
+    int sock = create_socket_client();
+    for(int i = 0; i < file_revisions.size(); i++) {
+		// std::this_thread::sleep_for(std::chrono::milliseconds(4000));
+		// keep looping till you get response from server and if first file, then send without getting response 
+		cout<<"sending file: "<<file_revisions[i]<<endl;
+		send_data(sock, file_revisions[i]);
+		// keep receiving until you get response from server
+		char response_arr[1024];
+		while(1){
+			int valread = recv(sock, response_arr, sizeof(response_arr), 0);
+			if (valread > 0 )
+				break;
+			for(int i=0; i<valread; i++)
+				cout<<response_arr[i];
+			// cout<<"bytes received: "<<valread<<endl;
+			printf("response: %s\n", response_arr);
+			// in case server closes socket, valread is 0
+			if (valread == 0) {
+				cout<<"\nServer closed connection";
+				exit(EXIT_FAILURE);
+			}
+		}
+    }
+    return 0;
+}
+
+
 // deprecated as status itself adds the file revisions
 // // similar to git add, create temp file to store new files
 // int add(string file_path) {
@@ -636,6 +684,8 @@ int main(int argc, char* argv[])
             status();
         if (strcmp(argv[1], "log") == 0)
             show_log();
+        if (strcmp(argv[1], "push") == 0)
+            push_to_server();
     }
     else {
         cout<<"Unknown command: "<<argv[1]<<endl<<"Run ./a.out <add/commit/push>"<<endl;

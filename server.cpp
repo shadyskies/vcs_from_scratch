@@ -1,32 +1,8 @@
 // Server side C/C++ program to demonstrate Socket programming
-#include <unistd.h>
-#include <stdio.h>
-#include <sys/socket.h>
-#include <stdlib.h>
-#include <netinet/in.h>
-#include <string.h>
-#include <fstream>
-#include <iostream>
-#define PORT 8050
-#define CHUNK_SIZE 1024
-using std::to_string;
-using std::cout;
-using std::string;
-using std::endl;
+#include "socket_functs.h"
+namespace fs = std::filesystem;
 
-// sends the entire data in chunks
-int send_all(int socket, std::string final_bytes) {
-	// sending first 8 bytes (stream size)
-	send(socket, (final_bytes.substr(0, 8)).c_str(), 8, 0);
-	// sending next 128 bytes (file_name)
-	send(socket, (final_bytes.substr(8, 136)).c_str(), 128, 0);
-	// sending data
-	send(socket, (final_bytes.substr(136, final_bytes.size())).c_str(), final_bytes.size(), 0);
-	return 0;
-}
-
-
-int create_socket() {
+int create_socket_server() {
 	int server_fd, new_socket, valread;
 	struct sockaddr_in address;
 	int opt = 1;
@@ -77,51 +53,6 @@ int create_socket() {
 	return new_socket;
 }
 
-
-int send_data(int new_socket, std::string file_name_arg) {
-	char buffer[1000000] = {0};
-
-	std::ifstream file_to_send(file_name_arg, std::ios::in | std::ios::binary);
-	
-
-	// send the buffer to the client
-	std::string contents((std::istreambuf_iterator<char>(file_to_send)), std::istreambuf_iterator<char>());
-
-	std::cout<<"[LOG] : Sending...\n";
-
-	std::string file_name_with_extension = "vcs.db";
-
-	std::cout<<"file name length: "<<file_name_with_extension.length()<<std::endl;
-	// first 8 bytes is transmissi size, next 128 is file name, rest contents size
-	std::string final_size;
-
-	char file_name[128];
-	for(int i=0; i<128; i++) {
-		if (i < file_name_with_extension.length()) {
-			file_name[i] = file_name_with_extension[i];
-		} else {
-			file_name[i] = '0';
-		}
-	}
-
-	std::string final_bytes = file_name + contents;
-	for (int i = 0; i<8; i++) {
-		if (i < std::to_string(final_bytes.size() + 8).length()) {
-			final_size.push_back(std::to_string(final_bytes.size() + 8)[i]);
-		} else {
-			final_size.push_back('!');
-		}
-	}
-
-	final_size = final_size + final_bytes;
-	final_bytes = final_size;
-	std::cout<<"[LOG] File size: "<<contents.size()<<std::endl;
-	std::cout<<"[LOG] : Transmission Data Size "<<final_bytes.length()<<" Bytes.\n";
-	send_all(new_socket, final_bytes);
-	// send(new_socket , final_bytes.c_str() , final_bytes.length() , 0 );
-	cout<<"[LOG] : Sent data"<<std::endl;
-	return 0;
-}
 
 // receive the entire file, return -1 for no socket connection
 int receive_basic(int sock, char *buf, string &file_name, string &file_content)
@@ -198,6 +129,7 @@ int receive_data(int sock) {
 	// 	cout<<buffer[i];
 	// cout<<"\n";
 
+	file_name = fs::path(file_name).filename();
 
 	std::cout<<"[LOG] : Data received "<<valread<<" bytes\n";
 	std::cout<<"[LOG] : File Name: "<<file_name<<endl;
@@ -205,7 +137,7 @@ int receive_data(int sock) {
 	auto myfile = std::fstream("received/" + file_name, std::ios::out | std::ios::binary);
     myfile.write(file_content.c_str(), valread);
     myfile.close();
-	std::cout<<"[LOG] : File Saved.\n";
+	std::cout<<"[LOG] : File Saved.\n\n";
 	return 0;
 }
 
@@ -214,7 +146,7 @@ int receive_data(int sock) {
 
 int main(int argc, char const *argv[])
 {
-	int new_socket = create_socket();
+	int new_socket = create_socket_server();
 	int flag = 0;
 	while(1){
 		// if connection inactive, create new socket, reset flag
@@ -222,7 +154,7 @@ int main(int argc, char const *argv[])
 			flag = 0;
 			close(new_socket);
 			// cout<<"close socket return val:: "<<close(new_socket);
-			new_socket = create_socket();
+			new_socket = create_socket_server();
 			// cout<<"new_socket: "<<new_socket<<endl;
 		}
 		int receive_val = receive_data(new_socket);
