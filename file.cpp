@@ -123,6 +123,12 @@ static int get_files_in_commit(void *param, int argc, char **argv, char **azColN
 }
 
 
+// static int get_commits_to_push(void *param, int argc, char **argv, char **azColName) {
+//     std::vector<string> *s1 = (std::vector<string> *)param;
+
+// }
+
+
 /* get all files in the directory in vector */
 void listdir(std::vector<string> &files_ls) {
     std::string path = ".";
@@ -199,6 +205,20 @@ int create_table() {
             fprintf(stdout, "Revisions table created successfully\n");
         }
     }
+    // commits_to_push
+    connection = sqlite3_open("vcs.db", &db);
+    if (!connection) {
+        string query = "CREATE TABLE commits_to_push (id INTEGER PRIMARY KEY DEFAULT 0, commit_id INT, FOREIGN KEY(commit_id) REFERENCES commits(id) ON DELETE CASCADE);";
+        connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
+
+        if( connection != SQLITE_OK ){
+            // fprintf(stderr, "SQL error: %s\n", errmessage);
+            sqlite3_free(errmessage);
+        } else {
+            fprintf(stdout, "Revisions table created successfully\n");
+        }   
+    }
+
     sqlite3_close(db);
     return 0;
 }
@@ -350,7 +370,7 @@ void commit(std::string message) {
                 fprintf(stderr, "SQL error: %s\n", errmessage);
                 sqlite3_free(errmessage);
         } else {
-            fprintf(stdout, "Inserted successfully\n");
+            // fprintf(stdout, "Inserted successfully\n");
         }
     }
 
@@ -403,6 +423,20 @@ void commit(std::string message) {
         }
     }
      
+    // commits_to_push
+    connection = sqlite3_open("vcs.db", &db);
+    if (!connection) {
+        string query = "INSERT INTO commits_to_push(commit_id) VALUES (" + to_string(commit_id) + ");";
+        connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
+
+        if( connection != SQLITE_OK ){
+            fprintf(stderr, "SQL error: %s\n", errmessage);
+            sqlite3_free(errmessage);
+        } else {
+            fprintf(stdout, "Inserted successfully\n");
+        }
+    }
+
     sqlite3_close(db);
     // delete file
     std::filesystem::remove("revisions/added.txt");
@@ -534,17 +568,37 @@ int push_to_server() {
     char *errmessage = 0;
     int connection;
 
+    // get the commit ids
+    std::vector<string> commit_ids;
+    connection = sqlite3_open("vcs.db", &db);
+    int commit_id = 0;
+    if (!connection) {
+        string query = "SELECT commit_id from commits_to_push;";
+        connection = sqlite3_exec(db, query.c_str(), get_files_in_commit, &commit_ids, &errmessage);     
+        if( connection != SQLITE_OK ){
+                fprintf(stderr, "SQL error: %s\n", errmessage);
+                sqlite3_free(errmessage);
+        } else {}
+    }
+    // if nothing to push
+    if (commit_ids.size() == 0) {
+        cout<<"No commits to push"<<endl;
+        return 0;
+    }
+
     connection = sqlite3_open("vcs.db", &db);
     std::vector<string> file_revisions;
-    string query = "SELECT (file_path) from file_revisions ORDER BY id DESC LIMIT 1;";
-    connection = sqlite3_exec(db, query.c_str(), get_files_in_commit, &file_revisions, &errmessage);
-    if (connection != SQLITE_OK) {
-        fprintf(stderr, "SQL error: %s\n", errmessage);
-        sqlite3_free(errmessage);
-    } else {
-        // print the files
-        for (int i = 0; i < file_revisions.size(); i++) 
-            cout<<file_revisions[i]<<endl;
+    for(int i=0; i<commit_ids.size(); i++){
+        string query = "SELECT (file_path) from file_revisions WHERE commit_id = " +  commit_ids[i] + " AND is_removed IS NULL;";
+        connection = sqlite3_exec(db, query.c_str(), get_files_in_commit, &file_revisions, &errmessage);
+        if (connection != SQLITE_OK) {
+            fprintf(stderr, "SQL error: %s\n", errmessage);
+            sqlite3_free(errmessage);
+        } else {
+            // print the files
+            for (int i = 0; i < file_revisions.size(); i++) 
+                cout<<file_revisions[i]<<endl;
+        }
     }
     
     // push to server
@@ -553,7 +607,11 @@ int push_to_server() {
 		// std::this_thread::sleep_for(std::chrono::milliseconds(4000));
 		// keep looping till you get response from server and if first file, then send without getting response 
 		cout<<"sending file: "<<file_revisions[i]<<endl;
-		send_data(sock, file_revisions[i]);
+        if (std::filesystem::is_directory(std::filesystem::path(file_revisions[i]))) {
+            send_mkdir_stream(sock, file_revisions[i]);
+        } else {
+		    send_data(sock, file_revisions[i]);
+        }
 		// keep receiving until you get response from server
 		char response_arr[1024];
 		while(1){
@@ -571,6 +629,15 @@ int push_to_server() {
 			}
 		}
     }
+
+    // remove from commits_to_push
+    for(int i=0; i<commit_ids.size(); i++){
+        connection = sqlite3_open("vcs.db", &db);
+        string query = "DELETE FROM commits_to_push WHERE commit_id = " + commit_ids[i] + ";";
+        connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);
+    }
+
+    cout<<"\u001b[32mPushed successfully to server!\u001b[0m"<<endl;
     return 0;
 }
 

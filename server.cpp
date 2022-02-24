@@ -26,7 +26,7 @@ int create_socket_server() {
 	address.sin_addr.s_addr = INADDR_ANY;
 	address.sin_port = htons( PORT );
 	
-	// Forcefully attaching socket to the port 8080
+	// Forcefully attaching socket to the port 8050
 	if (bind(server_fd, (struct sockaddr *)&address,
 								sizeof(address))<0)
 	{
@@ -53,12 +53,38 @@ int create_socket_server() {
 	return new_socket;
 }
 
+int server_create_directory(int sock, char *dir_path, int valread) {
+	string dir_path_final;
+	cout<<"valread= "<<valread<<endl;
+	// string stream_size;
+	// // string file_contents;
+	// for(int i=0; i<8; i++) {
+	// 	if (dir_path[i] != '!')
+	// 		stream_size += dir_path[i];
+	// 	// dir_path_final.push_back(dir_path[i]);
+	// }
+	// for(int i=8; i<8 + atoi(stream_size.c_str()); i++) {
+	// 	cout<<"dir_path[i]: "<<dir_path[i];
+	// 	dir_path_final.push_back(dir_path[i]);
+	// }
+	// // recv(sock, &file_contents, 1000, 0);
+	cout<<"printing dir.."<<endl;
+	for(int i=1; i<valread; i++) {
+		cout<<dir_path[i];
+		dir_path_final.push_back(dir_path[i]);
+	}
+	// printf("some string: %s\n", dir_path.c_str());
+	// cout<<"dir_path_final::" << dir_path_final;
+	fs::create_directory(fs::path(dir_path_final));
+	return 0;
+}
 
-// receive the entire file, return -1 for no socket connection
+
+// receive the entire file, return -1 for no socket connection, 2 for dir created
 int receive_basic(int sock, char *buf, string &file_name, string &file_content)
 {
 	int size_recv , total_size = 0;
-	int valread = recv(sock, buf, sizeof(buf), 0);
+	int valread = recv(sock, buf, 1000, 0);
 	// cout<<"received value: "<<valread<<endl;
 	if (valread == 0)
 		return -1;
@@ -66,6 +92,12 @@ int receive_basic(int sock, char *buf, string &file_name, string &file_content)
 	string final_bytes;
 	// get the total bytes
 	for(int i=0; i<8; i++) {
+		// if first char is !, then create dir
+		// cout<<"first byte: "<<buf[i]<<endl;
+		if (buf[i] == '!' && i==0){
+			server_create_directory(sock, buf, valread);
+			return 2;
+		}
 		final_bytes.push_back(buf[i]);
 		// cout<<buf[i];
 		if (buf[i] != '!')
@@ -123,18 +155,21 @@ int receive_data(int sock) {
 	// int valread = read(sock, buffer, sizeof(buffer));
 	if (valread == -1)
 		return -1;
+	cout<<"valread in receive data function: "<<valread<<endl;
+	if (valread == 2)
+		return 0;
 
 	// cout<<"size of stream:";
 	// for(int i = 0; i < 8; i++)
 	// 	cout<<buffer[i];
 	// cout<<"\n";
 
-	file_name = fs::path(file_name).filename();
+	// file_name = fs::path(file_name).filename();
 
 	std::cout<<"[LOG] : Data received "<<valread<<" bytes\n";
 	std::cout<<"[LOG] : File Name: "<<file_name<<endl;
 	std::cout<<"[LOG] : Saving data to file.\n";
-	auto myfile = std::fstream("received/" + file_name, std::ios::out | std::ios::binary);
+	auto myfile = std::fstream(file_name, std::ios::out | std::ios::binary);
     myfile.write(file_content.c_str(), valread);
     myfile.close();
 	std::cout<<"[LOG] : File Saved.\n\n";

@@ -27,5 +27,6 @@ int send_all(int socket, string final_bytes);
 int send_data(int socket, string file_name_arg);
 int receive_basic(int sock, char *buf, string &file_name, string &file_content);
 int receive_data(int sock);
+int send_mkdir_stream(int socket, string dir_path);
 
 #endif

@@ -43,7 +43,29 @@ int send_all(int socket, std::string final_bytes) {
 	return 0;
 }
 
+int send_mkdir_stream(int socket, string dir_path) {
+	string unpadded_size = std::to_string(dir_path.length());
+	string total_size; 
+	// // next 8 bytes = dir stream size;
+	// for (int i = 0; i<8; i++) {
+	// 	if (i < unpadded_size.length())
+	// 		total_size += unpadded_size[i];
+	// 	else 
+	// 		total_size += "!";
+	// }
+	// std::cout<<"[LOG] : Creating directory:  " << dir_path;
+	// std::cout<<"padded size: " << total_size << std::endl;
+	// dir_path = total_size + dir_path;
+	dir_path = "!" + dir_path;
+	printf("sending this to server: %s", dir_path.c_str());
+	send(socket, dir_path.c_str(), dir_path.size(), 0);
+	return 0;
+
+}
+
 int send_data(int new_socket, std::string file_name_arg) {
+	if (std::filesystem::is_directory(file_name_arg))
+		return -1;
 	char buffer[1000000] = {0};
 
 	std::ifstream file_to_send(file_name_arg, std::ios::in | std::ios::binary);
@@ -90,15 +112,19 @@ int send_data(int new_socket, std::string file_name_arg) {
 
 // int main()
 // {
-// 	std::vector<string> files_ls = {"vcs.db", "a.out", "client.cpp", "server.cpp"};
+// 	// std::vector<string> files_ls = {"vcs.db", "a.out", "client.cpp", "server.cpp"};
 // 	// std::vector<string> files_ls = {"README.md", ".gitignore"};
-// 	// std::vector<string> files_ls = {"file.cpp"};
+// 	std::vector<string> files_ls = {"./received", "./received/received.yml", "vcs.db", ".gitignore"};
 // 	int sock = create_socket_client();
 // 	for(int i = 0; i < files_ls.size(); i++) {
 // 		// std::this_thread::sleep_for(std::chrono::milliseconds(4000));
 // 		// keep looping till you get response from server and if first file, then send without getting response 
 // 		cout<<"sending file: "<<files_ls[i]<<endl;
-// 		send_data(sock, files_ls[i]);
+// 		if (std::filesystem::is_directory(std::filesystem::path(files_ls[i]))) {
+// 			send_mkdir_stream(sock, files_ls[i]);
+// 		} else {
+// 			send_data(sock, files_ls[i]);
+// 		}
 // 		// keep receiving until you get response from server
 // 		char response_arr[1024];
 // 		while(1){
