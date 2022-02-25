@@ -28,8 +28,10 @@ using std::ios;
 using std::filesystem::recursive_directory_iterator;
 using std::to_string;
 using std::pair;
+using std::filesystem::directory_iterator;
 
 struct stat info;
+std::vector<string> IGNORE {".git", "revisions"};
 
 void write_file(string text) {
     std::ofstream outfile;
@@ -133,10 +135,10 @@ static int get_files_in_commit(void *param, int argc, char **argv, char **azColN
 void listdir(std::vector<string> &files_ls) {
     std::string path = ".";
     for (const auto & file : recursive_directory_iterator(path)) {
-        if (file.path().u8string().string::find(".git") == string::npos) {
+        if (file.path().u8string().string::find(".git") == string::npos && file.path().u8string().string::find("revisions") == string::npos) {
             files_ls.push_back(file.path().u8string());
+            }
         }
-    }
 }
 
 void insert(string file_path, sqlite3 *db) {
@@ -257,6 +259,13 @@ int file_revision(std::vector<string> file_paths, string revision_type) {
 
 // get all files in directory, check for changed files
 void commit(std::string message) {
+    // if revisions folder empty / nothing to commit
+    int num_files = std::distance(directory_iterator("revisions"), directory_iterator{});
+    if (num_files == 0){
+        cout<<"Nothing to commit!";
+        return;
+    }
+
     sqlite3 *db;
     char *errmessage = 0;
     int connection;
@@ -283,7 +292,7 @@ void commit(std::string message) {
                 fprintf(stderr, "SQL error: %s\n", errmessage);
                 sqlite3_free(errmessage);
             } else {
-                fprintf(stdout, "Inserted successfully\n");
+                // fprintf(stdout, "Inserted successfully\n");
             }
         }
     }
@@ -314,7 +323,7 @@ void commit(std::string message) {
                 fprintf(stderr, "SQL error: %s\n", errmessage);
                 sqlite3_free(errmessage);
             } else {
-                fprintf(stdout, "Updated successfully\n");
+                // fprintf(stdout, "Updated successfully\n");
             }
         }
     }
@@ -337,7 +346,7 @@ void commit(std::string message) {
                 fprintf(stderr, "SQL error: %s\n", errmessage);
                 sqlite3_free(errmessage);
             } else {
-                fprintf(stdout, "Removed successfully\n");
+                // fprintf(stdout, "Removed successfully\n");
             }
         }
     }
@@ -355,7 +364,7 @@ void commit(std::string message) {
                 fprintf(stderr, "SQL error: %s\n", errmessage);
                 sqlite3_free(errmessage);
         } else {
-            fprintf(stdout, "Inserted successfully\n");
+            // fprintf(stdout, "Inserted successfully\n");
         }
     }
 
@@ -386,7 +395,7 @@ void commit(std::string message) {
                 fprintf(stderr, "SQL error: %s\n", errmessage);
                 sqlite3_free(errmessage);
             } else {
-                fprintf(stdout, "Inserted successfully\n");
+                // fprintf(stdout, "Inserted successfully\n");
             }
         }
     }
@@ -402,7 +411,7 @@ void commit(std::string message) {
                 fprintf(stderr, "SQL error: %s\n", errmessage);
                 sqlite3_free(errmessage);
             } else {
-                fprintf(stdout, "Inserted successfully\n");
+                // fprintf(stdout, "Inserted successfully\n");
             }
         }
     }
@@ -418,7 +427,7 @@ void commit(std::string message) {
                 fprintf(stderr, "SQL error: %s\n", errmessage);
                 sqlite3_free(errmessage);
             } else {
-                fprintf(stdout, "Inserted successfully\n");
+                // fprintf(stdout, "Inserted successfully\n");
             }
         }
     }
@@ -433,7 +442,7 @@ void commit(std::string message) {
             fprintf(stderr, "SQL error: %s\n", errmessage);
             sqlite3_free(errmessage);
         } else {
-            fprintf(stdout, "Inserted successfully\n");
+            // fprintf(stdout, "Inserted successfully\n");
         }
     }
 
@@ -504,20 +513,21 @@ void status () {
             // remaining files are newly added files
             file_revision(files_ls, "added");
             for(int i = 0; i < files_ls.size(); i++){
-                cout<<"\n[ADDED] "<<files_ls[i];
+                cout<<"\n\u001b[32m[ADDED] "<<files_ls[i]<<"\u001b[0m";
             }
             file_revision(modified, "modified");
             for (int i = 0; i < modified.size(); i++){
-                cout<<"\n[MODIFIED]"<<modified[i];     
+                cout<<"\n\u001b[33m[MODIFIED]"<<modified[i]<<"\u001b[0m";     
             } 
             file_revision(removed, "removed");
             for (int i = 0; i < removed.size(); i++){
-                cout<<"\n[REMOVED] "<<removed[i];
+                cout<<"\n\u001b[31m[REMOVED]"<<removed[i]<<"\u001b[0m";
             }
         }
     } else {
         cout<<"could not open database";
     }
+    cout<<endl;
     sqlite3_close(db);
 }
 
@@ -745,8 +755,13 @@ int main(int argc, char* argv[])
     if (check_args(argv[1], commands)) {
         // if (strcmp(argv[1], "add") == 0)
         //     add(argv[2]);
-        if (strcmp(argv[1], "commit") == 0)
+        if (strcmp(argv[1], "commit") == 0){
+            if (argc != 3) {
+                cout<<"Invalid format: Enter ./file.out commit <message> "<<endl;
+                return -1;
+            }
             commit(argv[2]);
+        }
         if (strcmp(argv[1], "status") == 0)
             status();
         if (strcmp(argv[1], "log") == 0)
