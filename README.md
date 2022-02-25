@@ -5,55 +5,70 @@
 - [About](#about)
 - [Getting Started](#getting_started)
 - [Usage](#usage)
-- [Contributing](../CONTRIBUTING.md)
+- [TODO](#todo)
+- [Future Scopes](#future)
 
 ## About <a name = "about"></a>
 
-Write about 1-2 paragraphs describing the purpose of your project.
+This is my attempt at creating a version control similar to git and is still currently in development, created from scratch in C++. Features functionalities like status, commit, push and log.   
+NOTE: This will work only on Linux and Unix systems and does not support Windows for now. This uses the C++17 standard.
 
+## Demo: 
+![video](./static/1.gif)
 ## Getting Started <a name = "getting_started"></a>
 
-These instructions will get you a copy of the project up and running on your local machine for development and testing purposes. See [deployment](#deployment) for notes on how to deploy the project on a live system.
+Clone the repository
+```
+https://github.com/shadyskies/vcs_from_scratch.git
+```
+
 
 ### Prerequisites
 
-What things you need to install the software and how to install them.
-
-```
-Give examples
-```
+Sqlite3, g++-9 should be installed.
 
 ### Installing
 
-A step by step series of examples that tell you how to get a development env running.
-
-Say what the step will be
+Build the main file.
 
 ```
-Give the example
+g++ -std=c++17 client.cpp file.cpp -lsqlite3 -o file.out
 ```
 
-And repeat
+And on the remote server.
 
 ```
-until finished
+g++ -std=c++17 server.cpp -o server.out
 ```
-
-End with an example of getting some data out of the system or using it for a little demo.
+Change the host IP in server.cpp to match server IP.
 
 ## Usage <a name = "usage"></a>
 
-Add notes about how to use the system.
+Run commands as you normally would with git.
+```
+./file.out < status / commit <message> / push(requires server to be running) / log >
+```
 
-## TODO: 
- - figure out database 
- - figure out files diff
+Run the server(Tested on docker container)
+```
+./server.out 
+```
+
+## TODO <a name = "todo"></a>: 
+ - ~~figure out database~~ 
+ - ~~figure out files diff~~
+ - ~~diff code for remote vs local~~
+ - ~~test in docker~~
+ - ~~garbage values in end of file (check bytes written)~~
+ - ~~diff bw server and client~~ 
+ - ~~listen for incoming connections after one client closes~~
  - add commit hash
- - diff code for remote vs local
- - where does HEAD point?
+ - where does HEAD for local point wrt remote?
+ - multiple clients? (data inconsistency)
  - package code
- - test in docker
- - garbage values in end of file (check bytes written)
- - diff bw server and client 
- - multiple clients?
- - listen for incoming connections after one client closes
+
+ ## Future Scopes  <a name = "future"></a>:
+ - Branching
+ - Revert Commit
+ - Cherry Pick
+ - Merge
