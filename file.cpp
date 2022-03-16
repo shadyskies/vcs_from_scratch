@@ -29,6 +29,9 @@ using std::filesystem::recursive_directory_iterator;
 using std::to_string;
 using std::pair;
 using std::filesystem::directory_iterator;
+namespace fs = std::filesystem;
+
+void status();
 
 struct stat info;
 std::vector<string> IGNORE {".git", "revisions"};
@@ -68,8 +71,8 @@ string get_curr_time() {
 
 /* takes vector as input and returns that with lines in .txt based on revision_type */
 void get_file_paths(std::vector<string> &_files, string revision_type){
-    if (std::filesystem::exists("revisions/" + revision_type + ".txt")) {
-        std::ifstream _type ("revisions/" + revision_type + ".txt");
+    if (std::filesystem::exists("revisions/files/" + revision_type + ".txt")) {
+        std::ifstream _type ("revisions/files/" + revision_type + ".txt");
         string line;
         while(std::getline(_type,line)){
             _files.push_back(line);
@@ -230,13 +233,8 @@ int create_table() {
 int file_revision(std::vector<string> file_paths, string revision_type) {
     if (file_paths.empty())
         return 0;
-    string tmp_file = "./revisions/" + revision_type + ".txt";
-    std::filesystem::path p{tmp_file};
-    std::string path = ".";
-    if (std::filesystem::exists(p) == 1) {
-        std::filesystem::remove(p);
-    }
-
+    string tmp_file = "./revisions/files/" + revision_type + ".txt";
+    
     std::vector<string> _files_in_file;
     get_file_paths(_files_in_file, revision_type);
     
@@ -248,7 +246,7 @@ int file_revision(std::vector<string> file_paths, string revision_type) {
         }
         else {
             std::ofstream added;
-            added.open("revisions/" + revision_type +".txt", std::ios_base::app);
+            added.open("revisions/files/" + revision_type +".txt", std::ios_base::app);
             added<<file_paths[i]<<endl;
             added.close();
         }
@@ -259,10 +257,13 @@ int file_revision(std::vector<string> file_paths, string revision_type) {
 
 // get all files in directory, check for changed files
 void commit(std::string message) {
-    // if revisions folder empty / nothing to commit
-    int num_files = std::distance(directory_iterator("revisions"), directory_iterator{});
-    if (num_files == 0){
-        cout<<"Nothing to commit!";
+    create_revisions_directory("revisions/commits/");
+    // in case there are changes and added.txt, modified files are removed
+    status();
+
+    // if revisions/files folder empty / nothing to commit
+    if (!fs::exists(fs::path("revisions/files/"))) {
+        cout<<"Nothing to commit!\n";
         return;
     }
 
@@ -449,11 +450,35 @@ void commit(std::string message) {
     sqlite3_close(db);
     // delete file
     std::filesystem::remove("revisions/added.txt");
+
+    // create specific commit folder and copy all files
+    string commit_path = "revisions/commits/" + to_string(commit_id) + "/";
+    create_revisions_directory(commit_path);
+    std::vector<string> files_ls;
+    listdir(files_ls);
+    
+    // TODO: create algo for specific files instead of whole directory
+    fs::copy_options copyOptions = fs::copy_options::update_existing | fs::copy_options::recursive;
+    for(int i = 0; i < files_ls.size(); i++) {
+        try{
+            auto file_path = std::filesystem::path(commit_path + files_ls[i]);
+            std::filesystem::copy(files_ls[i], file_path, copyOptions);
+        }
+        catch(int i) {
+            cout<<"Exception: "<<i<<endl;
+        }
+    }
+
+    // remove revisions/files/ dir
+    fs::remove_all(fs::path("revisions/files"));
 }
 
 
 // get files status
 void status () {
+    // rm prev dir to update values
+    fs::remove_all(fs::path("revisions/files/"));
+    create_revisions_directory("revisions/files/");
     sqlite3 *db;
     char *errmessage = 0;
     int connection;
@@ -507,7 +532,7 @@ void status () {
             }
 
             cout<<"Removed: "<<removed.size()<<endl;
-            cout<<"added: "<<files_ls.size()<<endl;
+            cout<<"Added: "<<files_ls.size()<<endl;
             cout<<"Modified: "<<modified.size()<<endl;
 
             // remaining files are newly added files
@@ -747,6 +772,7 @@ int main(int argc, char* argv[])
     std::vector<std::string> commands {"status", "commit", "push", "remove", "log"};
     // check if empty repository
     create_table();
+    create_revisions_directory("revisions");
     if (argc == 1) {
         cout<<"Incorrect usage. Run ./a.out <add/commit/push>"<<endl;
         return 1;
