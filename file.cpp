@@ -123,7 +123,9 @@ static int get_latest_commit_id(void *param, int argc, char **argv, char **azCol
 
 static int get_files_in_commit(void *param, int argc, char **argv, char **azColName) {
     std::vector<string> *s1 = (std::vector<string> *)param;
-    s1->push_back(argv[0]);
+    for(int i = 0; i<argc; i++) {
+        s1->push_back(argv[i]);
+    }
     return 0;
 }
 
@@ -233,7 +235,6 @@ int create_table() {
 int file_revision(std::vector<string> file_paths, string revision_type) {
     if (file_paths.empty())
         return 0;
-    cout<<"creating dir..."<<endl;
     create_revisions_directory("revisions/files/");
     
     string tmp_file = "./revisions/files/" + revision_type + ".txt";
@@ -362,7 +363,7 @@ void commit(std::string message) {
     // insert in commits table
     connection = sqlite3_open("vcs.db", &db);
     if (!connection) {
-        string query = "INSERT INTO commits(message, num_files_changed) VALUES('" + message + "', " + to_string(modified_files.size()) + ");";
+        string query = "INSERT INTO commits(message, num_files_changed) VALUES('" + message + "', " + to_string(modified_files.size() + added_files.size() + removed_files.size()) + ");";
         connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);
         if( connection != SQLITE_OK ){
                 fprintf(stderr, "SQL error: %s\n", errmessage);
@@ -457,15 +458,15 @@ void commit(std::string message) {
     // create specific commit folder and copy all files
     string commit_path = "revisions/commits/" + to_string(commit_id) + "/";
     create_revisions_directory(commit_path);
-    std::vector<string> files_ls;
-    listdir(files_ls);
+    added_files.insert(added_files.end(), modified_files.begin(), modified_files.end());
+    std::vector<string> files_in_commit = added_files;
     
-    // TODO: create algo for specific files instead of whole directory
+    // TODO: add deleted files support
     fs::copy_options copyOptions = fs::copy_options::update_existing | fs::copy_options::recursive;
-    for(int i = 0; i < files_ls.size(); i++) {
-        try{
-            auto file_path = std::filesystem::path(commit_path + files_ls[i]);
-            std::filesystem::copy(files_ls[i], file_path, copyOptions);
+    for(int i = 0; i < files_in_commit.size(); i++) {
+        try {
+            auto file_path = std::filesystem::path(commit_path + files_in_commit[i]);
+            std::filesystem::copy(files_in_commit[i], file_path, copyOptions);
         }
         catch(int i) {
             cout<<"Exception: "<<i<<endl;
@@ -580,17 +581,19 @@ void show_log() {
         if(commit_id == 0)
             break;
         connection = sqlite3_open("vcs.db", &db);
-        std::vector<string> file_revisions;
-        string query = "SELECT (file_path) from file_revisions WHERE commit_id=" + to_string(commit_id) + ";";
-        connection = sqlite3_exec(db, query.c_str(), get_files_in_commit, &file_revisions, &errmessage);
+        std::vector<string> commit_log;
+        string query = "SELECT message, local_created_at from commits WHERE id=" + to_string(commit_id) + ";";
+        connection = sqlite3_exec(db, query.c_str(), get_files_in_commit, &commit_log, &errmessage);
         if (connection != SQLITE_OK) {
             fprintf(stderr, "SQL error: %s\n", errmessage);
             sqlite3_free(errmessage);
         } else {
+            cout<<"--------------------------\n";
             // print the files
             cout<<"Commit ID: "<<commit_id<<endl;
-            for (int i = 0; i < file_revisions.size(); i++) 
-                cout<<file_revisions[i]<<endl;
+            // for (int i = 0; i < commit_log.size(); i++) 
+            cout<<"Message: "<<commit_log[0]<<endl;
+            cout<<"Timestamp: "<<commit_log[1]<<endl;
         }
         cout<<endl;
         commit_id--;
@@ -678,6 +681,30 @@ int push_to_server() {
     return 0;
 }
 
+/* Go to state based on commit id */
+void checkout_commit_id(string commit_id){
+
+    fs::copy_options copyOptions = fs::copy_options::update_existing | fs::copy_options::recursive;
+    for(int i = 1; i < stoi(commit_id)+1; i++) {
+        try {
+            // auto file_path = std::filesystem::path(commit_path + files_in_commit[i]);
+            std::filesystem::copy(fs::path("revisions/commits/" + to_string(i) + "/"), fs::path("./tmp"), copyOptions);
+        }
+        catch(int i) {
+            cout<<"Exception: "<<i<<endl;
+        }
+    }
+}
+
+
+void display_help() {
+    cout<<"Usage: ./file.out [--help] [status] [commit <message>] [push] [checkout <commit_id>] [log]\n\n";
+    cout<<"\t Status: Prints current status of files in repository\n";
+    cout<<"\t Commit: Records the revised files to local storage\n";
+    cout<<"\t Push: Pushes the file changes to remote server\n";
+    cout<<"\t Log: Displays the log messages for previous commits\n";
+    cout<<"\t Checkout: Go back to some particular commit\n";
+}
 
 // deprecated as status itself adds the file revisions
 // // similar to git add, create temp file to store new files
@@ -771,12 +798,12 @@ bool check_args(const std::string &value, const std::vector<std::string> &array)
 // Driver code
 int main(int argc, char* argv[])
 {
-    std::vector<std::string> commands {"status", "commit", "push", "remove", "log"};
+    std::vector<std::string> commands {"status", "commit", "push", "remove", "log", "--help", "checkout", "branch"};
     // check if empty repository
     create_table();
     create_revisions_directory("revisions");
     if (argc == 1) {
-        cout<<"Incorrect usage. Run ./a.out <add/commit/push>"<<endl;
+        cout<<"Incorrect usage. Run ./a.out <add/commit/push>. Run ./file.out --help for more information."<<endl;
         return 1;
     }
 
@@ -796,6 +823,15 @@ int main(int argc, char* argv[])
             show_log();
         if (strcmp(argv[1], "push") == 0)
             push_to_server();
+        if (strcmp(argv[1], "--help") == 0)
+            display_help();
+        if (strcmp(argv[1], "checkout") == 0){
+            if (argc != 3) {
+                cout<<"Invalid format: Enter ./file.out checkout <commit_id>"<<endl;
+                return -1;
+            }
+            checkout_commit_id(argv[2]);
+        }
     }
     else {
         cout<<"Unknown command: "<<argv[1]<<endl<<"Run ./a.out <add/commit/push>"<<endl;
