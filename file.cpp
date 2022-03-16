@@ -71,8 +71,8 @@ string get_curr_time() {
 
 /* takes vector as input and returns that with lines in .txt based on revision_type */
 void get_file_paths(std::vector<string> &_files, string revision_type){
-    if (std::filesystem::exists("revisions/files/" + revision_type + ".txt")) {
-        std::ifstream _type ("revisions/files/" + revision_type + ".txt");
+    if (std::filesystem::exists(".revisions/files/" + revision_type + ".txt")) {
+        std::ifstream _type (".revisions/files/" + revision_type + ".txt");
         string line;
         while(std::getline(_type,line)){
             _files.push_back(line);
@@ -235,9 +235,9 @@ int create_table() {
 int file_revision(std::vector<string> file_paths, string revision_type) {
     if (file_paths.empty())
         return 0;
-    create_revisions_directory("revisions/files/");
+    create_revisions_directory(".revisions/files/");
     
-    string tmp_file = "./revisions/files/" + revision_type + ".txt";
+    string tmp_file = "./.revisions/files/" + revision_type + ".txt";
     
     std::vector<string> _files_in_file;
     get_file_paths(_files_in_file, revision_type);
@@ -250,7 +250,7 @@ int file_revision(std::vector<string> file_paths, string revision_type) {
         }
         else {
             std::ofstream added;
-            added.open("revisions/files/" + revision_type +".txt", std::ios_base::app);
+            added.open(".revisions/files/" + revision_type +".txt", std::ios_base::app);
             added<<file_paths[i]<<endl;
             added.close();
         }
@@ -261,12 +261,12 @@ int file_revision(std::vector<string> file_paths, string revision_type) {
 
 // get all files in directory, check for changed files
 void commit(std::string message) {
-    create_revisions_directory("revisions/commits/");
+    create_revisions_directory(".revisions/commits/");
     // in case there are changes and added.txt, modified files are removed
     status();
 
-    // if revisions/files folder empty / nothing to commit
-    if (!fs::exists(fs::path("revisions/files/"))) {
+    // if .revisions/files folder empty / nothing to commit
+    if (!fs::exists(fs::path(".revisions/files/"))) {
         cout<<"Nothing to commit!\n";
         return;
     }
@@ -453,10 +453,10 @@ void commit(std::string message) {
 
     sqlite3_close(db);
     // delete file
-    std::filesystem::remove("revisions/added.txt");
+    std::filesystem::remove(".revisions/added.txt");
 
     // create specific commit folder and copy all files
-    string commit_path = "revisions/commits/" + to_string(commit_id) + "/";
+    string commit_path = ".revisions/commits/" + to_string(commit_id) + "/";
     create_revisions_directory(commit_path);
     added_files.insert(added_files.end(), modified_files.begin(), modified_files.end());
     std::vector<string> files_in_commit = added_files;
@@ -472,16 +472,25 @@ void commit(std::string message) {
             cout<<"Exception: "<<i<<endl;
         }
     }
+    // added deleted.txt
+    if (removed_files.size() > 0) {
+        std::ofstream deleted_files;
+        deleted_files.open(commit_path + "/deleted.txt", std::ios_base::app);
+        for (int i = 0; i < removed_files.size(); i++) {
+            deleted_files << removed_files[i] <<endl;
+        }
+        deleted_files.close();
+    }
 
-    // remove revisions/files/ dir
-    fs::remove_all(fs::path("revisions/files"));
+    // remove .revisions/files/ dir
+    fs::remove_all(fs::path(".revisions/files"));
 }
 
 
 // get files status
 void status () {
     // rm prev dir to update values
-    fs::remove_all(fs::path("revisions/files/"));
+    fs::remove_all(fs::path(".revisions/files/"));
     sqlite3 *db;
     char *errmessage = 0;
     int connection;
@@ -688,7 +697,17 @@ void checkout_commit_id(string commit_id){
     for(int i = 1; i < stoi(commit_id)+1; i++) {
         try {
             // auto file_path = std::filesystem::path(commit_path + files_in_commit[i]);
-            std::filesystem::copy(fs::path("revisions/commits/" + to_string(i) + "/"), fs::path("./tmp"), copyOptions);
+            std::filesystem::copy(fs::path(".revisions/commits/" + to_string(i) + "/"), fs::path("./tmp"), copyOptions);
+            // removed deleted files
+            if (fs::exists("./tmp/deleted.txt")){
+                cout<<"exists"<<endl;
+                std::ifstream tmp_file("./tmp/deleted.txt");
+                string line;
+                while(std::getline(tmp_file,line)){
+                    fs::remove("./tmp/" + line);
+                }
+            }
+            fs::remove("./tmp/deleted.txt");
         }
         catch(int i) {
             cout<<"Exception: "<<i<<endl;
@@ -724,7 +743,7 @@ void display_help() {
 //                 return 1;
 //             }
 //             std::ofstream added;
-//             added.open("revisions/added.txt", std::ios_base::app);
+//             added.open(".revisions/added.txt", std::ios_base::app);
 //             added << "./" + file_path<<endl;
 //             cout<<"\nAdded file!";
 //             return 0;
@@ -747,7 +766,7 @@ void display_help() {
 //     oss << std::put_time(&tm, "%Y-%m-%d %H-%M-%S");
 //     string timestamp = oss.str();
     
-//     string filepath = "revisions/" + timestamp + ".txt";
+//     string filepath = ".revisions/" + timestamp + ".txt";
 //     file.open(filepath,std::ios_base::app);
 //     file <<hash_string(timestamp)<< endl << endl;
 //     file << "This file was auto-generated on "<<timestamp;
@@ -765,7 +784,7 @@ void display_help() {
 //         if (file.path().u8string().string::find(".git") == string::npos){
 //             // open file_list and add new files
 //             std::ifstream file_list;
-//             file_list.open("revisions/list.txt", std::ios_base::app);
+//             file_list.open(".revisions/list.txt", std::ios_base::app);
 //             if (file_list.is_open()) {
 //                 string line;
 //                 while(std::getline(file_list, line)){
@@ -777,7 +796,7 @@ void display_help() {
 //             if (count==0) {
 //                 cout << file.path().u8string() << endl;
 //                 std::ofstream tmp;
-//                 tmp.open("revisions/list.txt", std::ios_base::app);
+//                 tmp.open(".revisions/list.txt", std::ios_base::app);
 //                 tmp <<file.path().u8string() << endl;
 //                 tmp.close();
 //             }
@@ -801,7 +820,7 @@ int main(int argc, char* argv[])
     std::vector<std::string> commands {"status", "commit", "push", "remove", "log", "--help", "checkout", "branch"};
     // check if empty repository
     create_table();
-    create_revisions_directory("revisions");
+    create_revisions_directory(".revisions");
     if (argc == 1) {
         cout<<"Incorrect usage. Run ./a.out <add/commit/push>. Run ./file.out --help for more information."<<endl;
         return 1;
