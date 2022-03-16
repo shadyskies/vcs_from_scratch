@@ -233,6 +233,9 @@ int create_table() {
 int file_revision(std::vector<string> file_paths, string revision_type) {
     if (file_paths.empty())
         return 0;
+    cout<<"creating dir..."<<endl;
+    create_revisions_directory("revisions/files/");
+    
     string tmp_file = "./revisions/files/" + revision_type + ".txt";
     
     std::vector<string> _files_in_file;
@@ -478,7 +481,6 @@ void commit(std::string message) {
 void status () {
     // rm prev dir to update values
     fs::remove_all(fs::path("revisions/files/"));
-    create_revisions_directory("revisions/files/");
     sqlite3 *db;
     char *errmessage = 0;
     int connection;
