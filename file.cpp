@@ -484,6 +484,11 @@ void commit(std::string message) {
 
     // remove .revisions/files/ dir
     fs::remove_all(fs::path(".revisions/files"));
+
+    // create / update HEAD ref for local
+    std::ofstream head_file(".revisions/HEAD");
+    head_file << commit_id;
+    head_file.close();
 }
 
 
@@ -716,6 +721,32 @@ void checkout_commit_id(string commit_id){
 }
 
 
+void create_branch_and_checkout(string branch_name) {
+    if (fs::exists(fs::path(".revisions/files"))) {
+        cout<<"Commit your changes before creating branch!\n";
+        return;
+    } else {
+        fs::create_directory(".revisions/branches/" + branch_name);
+        std::ofstream branches;
+        branches.open(".revisions/branches/branches.txt", std::ios_base::app);
+        branches << branch_name<<endl;
+
+        cout<<"Created branch "<<branch_name<<"\n";        
+    }
+}
+
+
+/* display all the branches in local repository */
+void display_branches() {
+    std::ifstream branches(".revisions/branches/branches.txt");
+    string line;
+    cout<<"Branches:\n";
+    while(std::getline(branches,line)) {
+        cout<<line<<endl;
+    }
+}
+
+
 void display_help() {
     cout<<"Usage: ./file.out [--help] [status] [commit <message>] [push] [checkout <commit_id>] [log]\n\n";
     cout<<"\t Status: Prints current status of files in repository\n";
@@ -820,7 +851,16 @@ int main(int argc, char* argv[])
     std::vector<std::string> commands {"status", "commit", "push", "remove", "log", "--help", "checkout", "branch"};
     // check if empty repository
     create_table();
-    create_revisions_directory(".revisions");
+    if (!fs::exists(".revisions")) {
+        create_revisions_directory(".revisions");
+        // stores HEADS of respective branches
+        create_revisions_directory(".revisions/branches/");
+        // add master as initial branch
+        std::ofstream branches(".revisions/branches/branches.txt");
+        branches << "main\n";
+        branches.close();
+    }
+
     if (argc == 1) {
         cout<<"Incorrect usage. Run ./a.out <add/commit/push>. Run ./file.out --help for more information."<<endl;
         return 1;
@@ -845,11 +885,18 @@ int main(int argc, char* argv[])
         if (strcmp(argv[1], "--help") == 0)
             display_help();
         if (strcmp(argv[1], "checkout") == 0){
-            if (argc != 3) {
-                cout<<"Invalid format: Enter ./file.out checkout <commit_id>"<<endl;
+            if (!(2<argc<4)) {
+                cout<<"Invalid format: Enter ./file.out checkout <commit_id> or ./file.out checkout -b <branch_name>"<<endl;
                 return -1;
             }
-            checkout_commit_id(argv[2]);
+            if (strcmp(argv[2], "-b")!=0)
+                checkout_commit_id(argv[2]);
+            else {
+                create_branch_and_checkout(argv[3]);
+            }
+        }
+        if ((strcmp(argv[1], "branch") == 0)) {
+            display_branches();
         }
     }
     else {
