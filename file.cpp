@@ -455,8 +455,15 @@ void commit(std::string message) {
     // delete file
     std::filesystem::remove(".revisions/added.txt");
 
-    // create specific commit folder and copy all files
-    string commit_path = ".revisions/commits/" + to_string(commit_id) + "/";
+    // create specific commit folder and copy added, modified files + deleted.txt based on current branch(HEAD)
+    std::ifstream file(".revisions/HEAD");
+    string current_branch;
+    std::getline(file, current_branch);
+    file.close();
+    
+    if (!fs::exists(".revisions/commits/" + current_branch))
+        fs::create_directory(".revisions/commits/" + current_branch);
+    string commit_path = ".revisions/commits/" + current_branch + "/" +  to_string(commit_id) + "/";
     create_revisions_directory(commit_path);
     added_files.insert(added_files.end(), modified_files.begin(), modified_files.end());
     std::vector<string> files_in_commit = added_files;
@@ -486,7 +493,9 @@ void commit(std::string message) {
     fs::remove_all(fs::path(".revisions/files"));
 
     // create / update HEAD ref for local
-    std::ofstream head_file(".revisions/HEAD");
+    if (!fs::exists(".revisions/branches/" + current_branch))
+        fs::create_directories(".revisions/branches/" + current_branch);
+    std::ofstream head_file(".revisions/branches/" + current_branch + "/HEAD");
     head_file << commit_id;
     head_file.close();
 }
@@ -721,17 +730,33 @@ void checkout_commit_id(string commit_id){
 }
 
 
+/* creates branch if -b flag is set and points HEAD to it */
 void create_branch_and_checkout(string branch_name) {
     if (fs::exists(fs::path(".revisions/files"))) {
         cout<<"Commit your changes before creating branch!\n";
         return;
     } else {
-        fs::create_directory(".revisions/branches/" + branch_name);
-        std::ofstream branches;
-        branches.open(".revisions/branches/branches.txt", std::ios_base::app);
-        branches << branch_name<<endl;
-
-        cout<<"Created branch "<<branch_name<<"\n";        
+        // create branch if not exists
+        if (!fs::exists(".revisions/branches/" + branch_name)){
+            fs::create_directory(".revisions/branches/" + branch_name);
+            std::ofstream branches;
+            branches.open(".revisions/branches/branches.txt", std::ios_base::app);
+            branches << branch_name<<endl;
+            branches.close();
+            std::ofstream head;
+            head.open(".revisions/HEAD", std::ios::trunc);
+            head << branch_name << endl;
+            head.close();
+            cout<<"Created branch "<<branch_name<<"\n";        
+            return;
+        } else {
+            // checkout branch
+            std::ofstream head;
+            head.open(".revisions/HEAD", std::ios::trunc);
+            head << branch_name << endl;
+            head.close();
+            return;
+        }
     }
 }
 
@@ -853,6 +878,9 @@ int main(int argc, char* argv[])
     create_table();
     if (!fs::exists(".revisions")) {
         create_revisions_directory(".revisions");
+        std::ofstream head(".revisions/HEAD");
+        head << "main";
+        head.close();
         // stores HEADS of respective branches
         create_revisions_directory(".revisions/branches/");
         // add master as initial branch
