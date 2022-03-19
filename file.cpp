@@ -705,6 +705,7 @@ int push_to_server() {
 }
 
 /* Go to state based on commit id */
+// TODO: fix checkout and get from branch commits
 void checkout_commit_id(string commit_id){
 
     fs::copy_options copyOptions = fs::copy_options::update_existing | fs::copy_options::recursive;
@@ -763,14 +764,37 @@ void create_branch_and_checkout(string branch_name) {
 
 /* display all the branches in local repository */
 void display_branches() {
+    // call status to update if there are any changes
+    status();
+    // get current branch
+    std::ifstream file(".revisions/HEAD");
+    string current_branch;
+    std::getline(file, current_branch);
+    file.close();
+
     std::ifstream branches(".revisions/branches/branches.txt");
     string line;
     cout<<"Branches:\n";
     while(std::getline(branches,line)) {
-        cout<<line<<endl;
+        if(strcmp(line.c_str(), current_branch.c_str()) == 0) {
+            cout<<"* "<<line<<endl;
+        } else {
+            cout<<line<<endl;
+        }
     }
+    branches.close();
 }
 
+/* merges branch 2 into branch 1 */
+void merge(string branch_2, string branch_1) {
+    // add files from branch 2 to branch 1
+    fs::copy_options copyOptions = fs::copy_options::update_existing | fs::copy_options::recursive;
+    fs::copy(".revisions/commits/" + branch_2, ".revisions/commits/" + branch_1, copyOptions);
+    cout<<"Merged commits!"<<endl;
+    // TODO: create commit to keep track of merges
+    // TODO: implement for multiple users
+
+}
 
 void display_help() {
     cout<<"Usage: ./file.out [--help] [status] [commit <message>] [push] [checkout <commit_id>] [log]\n\n";
@@ -873,7 +897,7 @@ bool check_args(const std::string &value, const std::vector<std::string> &array)
 // Driver code
 int main(int argc, char* argv[])
 {
-    std::vector<std::string> commands {"status", "commit", "push", "remove", "log", "--help", "checkout", "branch"};
+    std::vector<std::string> commands {"status", "commit", "push", "remove", "log", "--help", "checkout", "branch", "merge"};
     // check if empty repository
     create_table();
     if (!fs::exists(".revisions")) {
@@ -925,6 +949,13 @@ int main(int argc, char* argv[])
         }
         if ((strcmp(argv[1], "branch") == 0)) {
             display_branches();
+        }
+        if (strcmp(argv[1], "merge") == 0){
+            if (argc != 4)
+                cout<<"Invalid format: Enter ./file.out merge <branch2> <branch1>"<<endl;
+            else {
+                merge(argv[2], argv[3]);
+            }
         }
     }
     else {
