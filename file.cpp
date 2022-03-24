@@ -130,10 +130,15 @@ static int get_files_in_commit(void *param, int argc, char **argv, char **azColN
 }
 
 
-// static int get_commits_to_push(void *param, int argc, char **argv, char **azColName) {
-//     std::vector<string> *s1 = (std::vector<string> *)param;
-
-// }
+static int get_commits_info(void *param, int argc, char **argv, char **azColName) {
+    vector<vector<string>> *s1 = (vector<vector<string>> *)param;
+    vector<string> tmp;
+    for(int i = 0; i<argc; i++) {
+        tmp.push_back(argv[i]);
+    }
+    s1->push_back(tmp);
+    return 0;
+}
 
 
 /* get all files in the directory in vector */
@@ -188,7 +193,7 @@ int create_table() {
     // commits table
     connection = sqlite3_open("vcs.db", &db);
     if (!connection){
-        string query = "CREATE TABLE commits (id INTEGER PRIMARY KEY DEFAULT 0, message VARCHAR(256), local_created_at DATETIME DEFAULT(datetime('now', 'localtime')), remote_created_at DATETIME NULL, num_files_changed INTEGER);";
+        string query = "CREATE TABLE commits (id INTEGER PRIMARY KEY DEFAULT 0, message VARCHAR(256), branch VARCHAR(256),local_created_at DATETIME DEFAULT(datetime('now', 'localtime')), remote_created_at DATETIME NULL, num_files_changed INTEGER);";
         connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);   
 
         if( connection != SQLITE_OK ){
@@ -361,9 +366,15 @@ void commit(std::string message) {
 
 
     // insert in commits table
+    // get current branch 
+    std::ifstream file(".revisions/HEAD");
+    string current_branch;
+    std::getline(file, current_branch);
+    file.close();
+
     connection = sqlite3_open("vcs.db", &db);
     if (!connection) {
-        string query = "INSERT INTO commits(message, num_files_changed) VALUES('" + message + "', " + to_string(modified_files.size() + added_files.size() + removed_files.size()) + ");";
+        string query = "INSERT INTO commits(message, num_files_changed, branch) VALUES('" + message + "', " + to_string(modified_files.size() + added_files.size() + removed_files.size()) + ", '" + current_branch + "');";
         connection = sqlite3_exec(db, query.c_str(), callback, 0, &errmessage);
         if( connection != SQLITE_OK ){
                 fprintf(stderr, "SQL error: %s\n", errmessage);
@@ -456,10 +467,6 @@ void commit(std::string message) {
     std::filesystem::remove(".revisions/added.txt");
 
     // create specific commit folder and copy added, modified files + deleted.txt based on current branch(HEAD)
-    std::ifstream file(".revisions/HEAD");
-    string current_branch;
-    std::getline(file, current_branch);
-    file.close();
     
     if (!fs::exists(".revisions/commits/" + current_branch))
         fs::create_directory(".revisions/commits/" + current_branch);
@@ -590,38 +597,30 @@ void show_log() {
     int n = 1;
     cout<<"Enter number of commits to see log of: ";
     cin>>n;
+    // logs of only current branch
+    std::ifstream file(".revisions/HEAD");
+    string current_branch;
+    std::getline(file, current_branch);
+    file.close();
+
     connection = sqlite3_open("vcs.db", &db);
-    int commit_id = 0;
+    vector<vector<string>> commit_info;
     if (!connection) {
-        string query = "SELECT id from commits ORDER BY local_created_at DESC LIMIT 1;";
-        connection = sqlite3_exec(db, query.c_str(), get_latest_commit_id, &commit_id, &errmessage);     
+        string query = "SELECT id, message, local_created_at from commits WHERE branch='" + current_branch + "' ORDER BY local_created_at DESC LIMIT " + to_string(n) +  ";";
+        connection = sqlite3_exec(db, query.c_str(), get_commits_info, &commit_info, &errmessage);     
         if( connection != SQLITE_OK ){
                 fprintf(stderr, "SQL error: %s\n", errmessage);
                 sqlite3_free(errmessage);
         } else {}
     }
-    while (n--) {
-        if(commit_id == 0)
-            break;
-        connection = sqlite3_open("vcs.db", &db);
-        std::vector<string> commit_log;
-        string query = "SELECT message, local_created_at from commits WHERE id=" + to_string(commit_id) + ";";
-        connection = sqlite3_exec(db, query.c_str(), get_files_in_commit, &commit_log, &errmessage);
-        if (connection != SQLITE_OK) {
-            fprintf(stderr, "SQL error: %s\n", errmessage);
-            sqlite3_free(errmessage);
-        } else {
-            cout<<"--------------------------\n";
-            // print the files
-            cout<<"Commit ID: "<<commit_id<<endl;
-            // for (int i = 0; i < commit_log.size(); i++) 
-            cout<<"Message: "<<commit_log[0]<<endl;
-            cout<<"Timestamp: "<<commit_log[1]<<endl;
-        }
-        cout<<endl;
-        commit_id--;
+    for(int i=0; i<commit_info.size(); i++){
+        cout<<"--------------------------\n";
+        // print the files
+        cout<<"Commit ID: "<<commit_info[i][0]<<endl;
+        cout<<"Message: "<<commit_info[i][1]<<endl;
+        cout<<"Timestamp: "<<commit_info[i][2]<<endl;
     }
-
+    cout<<"Branch: "<<current_branch<<endl;
 }
 
 
